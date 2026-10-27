@@ -6,7 +6,7 @@ import { natureLabel, STAT_SHORT } from './mechanics.js';
 import { ACHIEVEMENTS, missionList, claimMission, POINT_RULES, DIFF_POINT_MULT } from './progress.js';
 import {
   SCREENS, registerActions, go, render, esc, typeBadge, toast, persistProfile, pokedexCount, refreshMissionCount,
-  filterBar, filterState, sortSpecies, abilityInfo, unlockedFor, evolutionChain, learnsetTable,
+  filterBar, filterState, sortSpecies, abilityInfo, unlockedFor, evolutionChain, learnsetTable, caughtState, caughtMark, adminAllShinies,
 } from './ui.js';
 import { sfx, playMusic } from './audio.js';
 
@@ -20,24 +20,30 @@ export function initSocialUI() {
     const showAll = !!S.ui.showAll;
     const adminAll = S.user?.isAdmin && S.profile.settings.allStarters;
     const caught = new Set(adminAll ? Object.keys(DEX).map(Number) : S.profile.caught);
-    const shinies = new Set(S.profile.shinies || []);
+    const shinies = new Set(adminAllShinies() ? Object.keys(DEX).map(Number) : (S.profile.shinies || []));
+    const onlyShiny = !!S.ui.onlyShiny;
     const all = Object.keys(DEX).map(Number);
     const base = region === -1 ? all : all.filter(id => regionOf(id) === region);
     const f = filterState('dex');
-    const ids = sortSpecies(showAll ? base : base.filter(id => caught.has(id)), { ...f, region: '' });
+    const ids = sortSpecies((onlyShiny ? base.filter(id => shinies.has(id)) : showAll ? base : base.filter(id => caught.has(id))), { ...f, region: '' });
     const regionCount = i => all.filter(id => regionOf(id) === i && caught.has(id)).length;
     return `<section class="panel">
       <div class="row"><h2>Pokédex <small class="muted">${pokedexCount().toLocaleString()} / ${all.length.toLocaleString()} caught · ${shinies.size} shiny</small></h2><button data-act="back">Back</button></div>
       ${adminAll ? '<p class="notice">Admin unlock is on, so every species counts as available.</p>' : ''}
       <div class="tabs wrap"><button class="${region === -1 ? 'active' : ''}" data-act="dexRegion" data-arg="-1">All</button>${REGIONS.map((r, i) => `<button class="${i === region ? 'active' : ''}" data-act="dexRegion" data-arg="${i}">${r.name} <small>${regionCount(i)}/${all.filter(id => regionOf(id) === i).length}</small></button>`).join('')}</div>
       ${filterBar('dex', { species: true, region: false })}
-      <label class="check"><input type="checkbox" class="silent" data-act="dexShowAll" ${showAll ? 'checked' : ''}> Show Pokémon I haven't caught yet</label>
+      <div class="row wrap dex-options">
+        <label class="check"><input type="checkbox" class="silent" data-act="dexShowAll" ${showAll ? 'checked' : ''}> Show Pokémon I haven't caught yet</label>
+        <label class="check"><input type="checkbox" class="silent" data-act="dexOnlyShiny" ${onlyShiny ? 'checked' : ''}> Only shinies I've caught</label>
+        <span class="small muted legend-inline"><i class="mini-ball"></i> caught · <span class="shiny-mark">✦</span> shiny caught (counts as caught too)</span>
+      </div>
       <div class="dex-grid">${ids.length ? ids.map(id => {
         const have = caught.has(id);
         return `<button class="dex-entry ${have ? '' : 'missing'}" data-act="dexEntry" data-arg="${id}" title="${have ? esc(DEX[id].n) : '???'}">
           <span class="dex-no">#${String(id).padStart(4, '0')}</span>
           ${img(spriteUrl(id, { shiny: shinies.has(id) }), 'dex-sprite', have ? DEX[id].n : '')}
-          <strong>${have ? esc(DEX[id].n) : '???'}${shinies.has(id) ? ' <span class="shiny-mark">✦</span>' : ''}</strong>
+          <strong>${have ? esc(DEX[id].n) : '???'}</strong>
+          ${have ? caughtMark(id) : ''}
         </button>`;
       }).join('') : `<p class="muted empty">${showAll ? 'No Pokémon match these filters.' : 'No caught Pokémon here yet. Tick "Show Pokémon I haven\'t caught yet" to browse them all.'}</p>`}</div>
     </section>`;
@@ -141,6 +147,7 @@ export function initSocialUI() {
     openPokedex: () => go('pokedex', { region: -1 }),
     dexRegion: r => go('pokedex', { ...S.ui, region: +r }),
     dexShowAll: (_, el) => { S.ui.showAll = el.checked; render(); },
+    dexOnlyShiny: (_, el) => { S.ui.onlyShiny = el.checked; render(); },
     dexEntry: id => { S.modal = { type: 'dexEntry', id: +id }; render(); },
     openMissions: () => go('missions', { tab: 'missions' }),
     missionsTab: tab => go('missions', { tab }),
@@ -204,7 +211,7 @@ export function dexEntryHtml(id) {
   const sp = DEX[id];
   const adminAll = S.user?.isAdmin && S.profile.settings.allStarters;
   const have = adminAll || S.profile.caught.includes(id);
-  const shiny = (S.profile.shinies || []).includes(id);
+  const shiny = caughtState(id) === 'shiny';
   if (!have) {
     return `<div class="center-text"><div class="dex-no">#${String(id).padStart(4, '0')}</div>${img(artUrl(id), 'modal-art silhouette', '')}
       <h2>???</h2><p class="muted">You haven't caught this Pokémon yet. It's from ${REGIONS[regionOf(id)].name}.</p></div>
@@ -214,7 +221,8 @@ export function dexEntryHtml(id) {
   return `<div class="dex-detail">
     <div class="center-text"><div class="dex-no">#${String(id).padStart(4, '0')} · ${REGIONS[regionOf(id)].name}</div>
       ${img(artUrl(id, shiny && S.ui.dexShiny), 'modal-art', sp.n)}
-      <h2>${esc(sp.n)}${shiny ? ' <span class="shiny-mark">✦</span>' : ''}</h2><div>${sp.t.map(typeBadge).join('')}</div>
+      <h2>${esc(sp.n)}</h2><div>${sp.t.map(typeBadge).join('')}</div>
+      <p class="small">${shiny ? '<span class="shiny-mark">✦</span> Shiny caught · <i class="mini-ball"></i> Normal form caught' : '<i class="mini-ball"></i> Caught · Shiny not caught yet'}</p>
       ${shiny ? `<label class="check center"><input type="checkbox" class="silent" data-act="dexShinyToggle" ${S.ui.dexShiny ? 'checked' : ''}> Show shiny</label>` : ''}
     </div>
     <h4>Base stats <small class="muted">(total ${bst(id)})</small></h4>

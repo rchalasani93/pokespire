@@ -39,7 +39,7 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Missions and achievements.** Three daily and three weekly missions (the same for everyone each day and week) award bonus points when claimed, and 24 achievements (catching, shinies, Legendaries, badges, the Hall of Fame on each difficulty, a Classic win in every region and more) add points automatically. Runs using God mode or other admin tools score 0 and don't count.
 
-**Shinies.** Wild, Elite and Legendary Pokémon are shiny 1 time in 512, with a sparkle when they appear. Catching a shiny unlocks a shiny starter option for its evolution family.
+**Shinies.** Wild, Elite and Legendary Pokémon are shiny 1 time in 512, with a sparkle when they appear. Catching a shiny unlocks a shiny starter option for its evolution family. A shiny catch also counts as catching the species. Wild Pokémon in battle show a Poké Ball mark if you've caught that species and a gold ✦ if you've caught its shiny; the Pokédex shows the same marks and can filter to shinies only. Ten shiny achievements and a weekly shiny mission reward hunting. Admins can toggle a view-only "every shiny unlocked" option that doesn't add real catches or achievements.
 
 **Pokédex.** The main menu's Pokédex lists every species you've caught (with shinies marked), by region, with search, type filter and sorting; tick "show uncaught" to browse silhouettes of the rest. Each entry shows base stats, abilities, what you've unlocked for the family, and its evolution line.
 

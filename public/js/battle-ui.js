@@ -6,7 +6,7 @@ import { playerAction, forceSwitch, battleView } from './battle.js';
 import { ITEMS, trainerSpriteUrl } from './content.js';
 import { playMusic, sfx, playCry } from './audio.js';
 import {
-  go, render, registerActions, esc, hpBar, statusTag, typeBadge, persistRun, queueFlow, finishBattle, SCREENS,
+  go, render, registerActions, esc, hpBar, statusTag, typeBadge, persistRun, queueFlow, finishBattle, SCREENS, caughtMark,
 } from './ui.js';
 
 const B = { queue: [], view: null, text: '', mode: 'main', playing: false, timer: null, item: null, fx: null, captured: false };
@@ -98,7 +98,7 @@ function battleScreen() {
     ${run.god ? '<div class="god-chip">⚡ GOD</div>' : ''}
     ${b.trainer ? `<img class="trainer-sprite" src="${trainerSpriteUrl(b.trainer.sprite)}" alt="" onerror="this.remove()">` : ''}
     <div class="hud foe">
-      <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' ✦' : ''}</strong><span>Lv ${E?.lv}</span></div>
+      <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} ${E ? caughtMark(E.id) : ''}</strong><span>Lv ${E?.lv}</span></div>
       <div class="hud-types">${E ? DEX[E.id].t.map(typeBadge).join('') : ''}</div>
       ${E ? hpBar(E.hp, E.max) : ''}
       <div class="row small">${statusTag(E?.st)}${b.enemy[b.ei]?.elite ? '<span class="elite-tag">ELITE</span>' : ''}${enemyBalls}</div>

@@ -229,6 +229,21 @@ SCREENS.setup = () => `<section class="panel narrow">
 </section>`;
 
 // ---------- Main menu ----------
+/** Admin view-only unlock: every species' shiny is available (does not change real catches or achievements). */
+export const adminAllShinies = () => !!(S.user?.isAdmin && S.profile?.settings.allShinies);
+/** Caught-state for a species: 'shiny' (shiny caught), 'caught', or null. */
+export function caughtState(id) {
+  if ((S.profile?.shinies || []).includes(id) || adminAllShinies()) return 'shiny';
+  if ((S.profile?.caught || []).includes(id) || (S.user?.isAdmin && S.profile?.settings.allStarters)) return 'caught';
+  return null;
+}
+export function caughtMark(id) {
+  const st = caughtState(id);
+  if (st === 'shiny') return '<span class="caught-mark shiny" title="Shiny caught (and the normal form)">✦</span>';
+  if (st === 'caught') return '<span class="caught-mark" title="Caught"><i class="mini-ball"></i></span>';
+  return '';
+}
+
 export function pokedexCount() {
   return S.user?.isAdmin && S.profile.settings.allStarters ? Object.keys(DEX).length : new Set(S.profile.caught).size;
 }
@@ -514,7 +529,7 @@ SCREENS.starters = () => {
     ${filterBar('starters', { species: true, region: false })}
     <div class="starter-grid">
       ${ids.length ? ids.map(id => `<button class="starter" data-act="pickStarter" data-arg="${id}">
-        ${img(artUrl(id), '', DEX[id].n)}<strong>${DEX[id].n}</strong><div>${DEX[id].t.map(typeBadge).join('')}</div>${['dex', 'name'].includes(f.sort) ? '' : `<small class="muted">${f.sort === 'bst' ? 'BST ' + bst(id) : SPECIES_SORTS.find(x => x[0] === f.sort)[1].replace('Base ', '') + ' ' + DEX[id].b[STAT_IDX[f.sort]]}</small>`}</button>`).join('')
+        ${img(artUrl(id), '', DEX[id].n)}<strong>${DEX[id].n}${unlockedFor(id).shiny ? ' <span class="shiny-mark" title="Shiny unlocked for this family">✦</span>' : ''}</strong><div>${DEX[id].t.map(typeBadge).join('')}</div>${['dex', 'name'].includes(f.sort) ? '' : `<small class="muted">${f.sort === 'bst' ? 'BST ' + bst(id) : SPECIES_SORTS.find(x => x[0] === f.sort)[1].replace('Base ', '') + ' ' + DEX[id].b[STAT_IDX[f.sort]]}</small>`}</button>`).join('')
         : `<p class="muted empty">${f.q || f.type ? 'No Pokémon match these filters.' : region >= 0 ? `You haven't caught any ${REGIONS[region].name} Pokémon yet.` : 'No Pokémon yet.'}</p>`}
     </div>
   </section>`;
@@ -533,6 +548,7 @@ registerActions({
     S.modal = null;
     S.run = newRun(+id, difficulty, mode, choice);
     track('runStart');
+    if (S.run.party[0].shiny) track('shinyStart');
     S.profile.stats.runs++;
     persistProfile();
     playCry(+id);
@@ -1005,6 +1021,7 @@ export function recordCatch(mon) {
   if (mon.shiny && !e.s) { e.s = true; changed = true; }
   S.profile.shinies ||= [];
   if (mon.shiny && !S.profile.shinies.includes(mon.id)) { S.profile.shinies.push(mon.id); changed = true; }
+  if (!S.profile.caught.includes(mon.id)) { S.profile.caught.push(mon.id); changed = true; } // shiny or not, the species is caught
   return changed;
 }
 function unlockedNatures(mon) { return [...(dexEntry(mon.id)?.n || [])].sort((a, b) => a - b); }
@@ -1017,7 +1034,7 @@ function unlockedAbilitySlots(mon) {
 export function unlockedFor(id) {
   const e = S.profile.dex?.[familyRoot(id)] || { n: [], a: [] };
   const sp = DEX[id];
-  return { natures: [...e.n].sort((a, b) => a - b), abilities: [...new Set(e.a.map(slot => slot === 'H' ? sp.h : sp.a[+slot] || sp.a[0]).filter(Boolean))], shiny: !!e.s };
+  return { natures: [...e.n].sort((a, b) => a - b), abilities: [...new Set(e.a.map(slot => slot === 'H' ? sp.h : sp.a[+slot] || sp.a[0]).filter(Boolean))], shiny: !!e.s || adminAllShinies() };
 }
 
 registerActions({
@@ -1138,6 +1155,8 @@ function adminHtml() {
     ${runTools}
     <h3>Account</h3>
     <label class="check"><input type="checkbox" class="silent" data-act="adminAllStarters" ${S.profile.settings.allStarters ? 'checked' : ''}> Every Pokémon is available as a starter</label>
+    <label class="check"><input type="checkbox" class="silent" data-act="adminAllShinies" ${S.profile.settings.allShinies ? 'checked' : ''}> Every shiny is unlocked (Pokédex and shiny starters)</label>
+    <p class="muted small">These two unlocks only change what you can view and pick. They don't add real catches, so they never unlock achievements.</p>
     <div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`;
 }
 
@@ -1192,6 +1211,7 @@ registerActions({
     toast(`${sp.n} added to your ${where === 'party' ? 'team' : 'Box'}`);
     persistRun(); render();
   }),
+  adminAllShinies: adminOnly((_, el) => { S.profile.settings.allShinies = el.checked; persistProfile(); render(); }),
   adminAllStarters: adminOnly((_, el) => { S.profile.settings.allStarters = el.checked; persistProfile(); render(); }),
 });
 
@@ -1464,6 +1484,7 @@ registerActions({
       if (modeOf(run) === 'classic') { S.profile.classicWins ||= []; if (!S.profile.classicWins.includes(runRegion(run))) S.profile.classicWins.push(runRegion(run)); }
       track('hallOfFame');
       track('hallOfFame:' + (run.difficulty || 'medium'));
+      if (run.party.some(m => m.shiny)) track('hallOfFame:shiny');
     }
     persistProfile();
     await endRun('Champion');

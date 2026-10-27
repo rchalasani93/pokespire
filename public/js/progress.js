@@ -2,7 +2,7 @@
 // Points: every win and catch adds to the run's score (scaled by difficulty). Finished runs go to the
 // leaderboard. Missions and achievements add bonus points to the player's lifetime total.
 import { S } from './state.js';
-import { DEX } from './data.js';
+import { DEX, regionOf } from './data.js';
 // api.js is loaded lazily so this module stays testable outside the browser
 const claimPoints = async n => (await import('./api.js')).api.claimPoints(n);
 import { diffOf } from './content.js';
@@ -92,6 +92,7 @@ const WEEKLY_POOL = [
   { id: 'e4x4', text: 'Beat 4 Elite Four members', ev: 'win:e4', target: 4, pts: 1200 },
   { id: 'money5k', text: 'Earn $5,000 in prize money', ev: 'money', target: 5000, pts: 800 },
   { id: 'acts5', text: 'Clear 5 acts', ev: 'actClear', target: 5, pts: 1000 },
+  { id: 'shiny1', text: 'Catch a shiny Pokémon', ev: 'shiny', target: 1, pts: 1500 },
 ];
 
 export function currentMissions() {
@@ -130,6 +131,7 @@ export async function claimMission(period, id) {
 // ---------- Achievements ----------
 const c = ev => S.profile.counters?.[ev] || 0;
 const realDex = () => new Set(S.profile.caught).size;
+const realShinies = () => new Set(S.profile.shinies || []);
 export const ACHIEVEMENTS = [
   { id: 'first_catch', name: 'First Catch', desc: 'Catch your first Pokémon', pts: 50, test: () => c('catch') >= 1 },
   { id: 'catch_100', name: 'Poké Ball Pro', desc: 'Catch 100 Pokémon', pts: 300, test: () => c('catch') >= 100 },
@@ -138,7 +140,16 @@ export const ACHIEVEMENTS = [
   { id: 'dex_500', name: 'Pokédex Master', desc: 'Catch 500 different species', pts: 1000, test: () => realDex() >= 500 },
   { id: 'dex_all', name: "Gotta Catch 'Em All", desc: 'Catch all 1,025 species', pts: 5000, test: () => realDex() >= 1025 },
   { id: 'shiny_1', name: 'Something Sparkly', desc: 'Catch a shiny Pokémon', pts: 300, test: () => c('shiny') >= 1 },
+  { id: 'shiny_5', name: 'Glimmering', desc: 'Catch 5 shiny Pokémon', pts: 600, test: () => c('shiny') >= 5 },
   { id: 'shiny_10', name: 'Shiny Hunter', desc: 'Catch 10 shiny Pokémon', pts: 1500, test: () => c('shiny') >= 10 },
+  { id: 'shiny_25', name: 'Shining Collector', desc: 'Catch 25 shiny Pokémon', pts: 3000, test: () => c('shiny') >= 25 },
+  { id: 'shiny_dex_50', name: 'Shiny Dex', desc: 'Catch 50 different shiny species', pts: 5000, test: () => realShinies().size >= 50 },
+  { id: 'shiny_legend', name: 'Golden Legend', desc: 'Catch a shiny Legendary or Mythical Pokémon', pts: 2000, test: () => c('shinyLegendary') >= 1 },
+  { id: 'shiny_start', name: 'Sparkling Partner', desc: 'Start a run with a shiny starter', pts: 300, test: () => c('shinyStart') >= 1 },
+  { id: 'shiny_team', name: 'Dazzling Team', desc: 'Have six shiny Pokémon on your team', pts: 1500, test: () => (S.run?.party || []).filter(m => m.shiny).length >= 6 },
+  { id: 'shiny_hof', name: 'Shiny Champion', desc: 'Enter the Hall of Fame with a shiny on your team', pts: 1500, test: () => c('hallOfFame:shiny') >= 1 },
+  { id: 'shiny_types', name: 'Rainbow Shine', desc: 'Catch shinies of 9 different types', pts: 1500, test: () => new Set([...realShinies()].flatMap(id => DEX[id]?.t || [])).size >= 9 },
+  { id: 'shiny_regions', name: 'Shiny World Tour', desc: 'Catch a shiny from every region', pts: 4000, test: () => new Set([...realShinies()].map(regionOf)).size >= 9 },
   { id: 'legend_1', name: 'Legendary Encounter', desc: 'Catch a Legendary Pokémon', pts: 300, test: () => c('catchLegendary') >= 1 },
   { id: 'legend_10', name: 'Myth Collector', desc: 'Catch 10 Legendary Pokémon', pts: 1500, test: () => c('catchLegendary') >= 10 },
   { id: 'badge_1', name: 'First Badge', desc: 'Defeat a Gym Leader', pts: 100, test: () => c('win:gym') >= 1 },
@@ -206,7 +217,7 @@ export function caughtEvents(mon) {
   track('catch');
   for (const t of sp.t) track('catchType:' + t);
   if (sp.L || sp.M) { track('catchLegendary'); base += POINTS.catchLegendary; }
-  if (mon.shiny) { track('shiny'); base += POINTS.catchShiny; }
+  if (mon.shiny) { track('shiny'); base += POINTS.catchShiny; if (sp.L || sp.M) track('shinyLegendary'); }
   return addRunPoints(base);
 }
 

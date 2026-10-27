@@ -212,6 +212,12 @@ assert.equal(crashes, 0, 'battle engine crashed');
   S.profile.caught = [1];
   P.track('catch');
   assert.ok(S.profile.achievements.first_catch, 'First Catch unlocks');
+  // Shinies: a shiny catch counts as caught, unlocks shiny achievements
+  const sh = M.createMon(144, 40); sh.shiny = true;
+  P.caughtEvents(sh);
+  assert.ok(S.profile.achievements.shiny_1 && S.profile.achievements.shiny_legend, 'shiny + shiny Legendary achievements');
+  const norm = normalizeProfile({ caught: [1], shinies: [25] });
+  assert.ok(norm.caught.includes(25), 'shiny species also counts as caught');
   S.run.god = true;
   const before = S.run.score;
   assert.equal(P.battleWon('champion', [M.createMon(6, 60)]), 0, 'no points in God mode');
