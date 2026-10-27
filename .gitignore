@@ -1,6 +1,3 @@
-# ---------------------------------------------------------------
-# Assistant and agent tool files — keep these out of the repository
-# ---------------------------------------------------------------
 .openai/
 .codex/
 .agents/
@@ -30,7 +27,6 @@ GEMINI.md
 .mcp.json
 mcp.json
 *.prompt.md
-# Leftover hosting scaffolding from the old site template
 .sites-runtime/
 _old-sites-scaffold/
 
