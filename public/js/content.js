@@ -1,35 +1,35 @@
 // Items, trainers, Gym Leaders, villain teams, Elite Four and Champions.
 
-// ---------- Items (prices follow the recent main-series games) ----------
+// ---------- Items (prices are a tenth of the main-series games; runs start with $100) ----------
 export const ITEMS = {
-  'Poké Ball': { kind: 'ball', price: 200, slug: 'poke-ball', desc: 'A device for catching wild Pokémon.' },
-  'Great Ball': { kind: 'ball', price: 600, slug: 'great-ball', desc: 'A good ball with a higher catch rate (×1.5).' },
-  'Ultra Ball': { kind: 'ball', price: 800, slug: 'ultra-ball', desc: 'A high-performance ball (×2).' },
-  'Quick Ball': { kind: 'ball', price: 1000, slug: 'quick-ball', desc: '×5 catch rate on the first turn of a battle.' },
-  'Dusk Ball': { kind: 'ball', price: 1000, slug: 'dusk-ball', desc: '×3 catch rate at night (uses your clock).' },
+  'Poké Ball': { kind: 'ball', price: 20, slug: 'poke-ball', desc: 'A device for catching wild Pokémon.' },
+  'Great Ball': { kind: 'ball', price: 60, slug: 'great-ball', desc: 'A good ball with a higher catch rate (×1.5).' },
+  'Ultra Ball': { kind: 'ball', price: 80, slug: 'ultra-ball', desc: 'A high-performance ball (×2).' },
+  'Quick Ball': { kind: 'ball', price: 100, slug: 'quick-ball', desc: '×5 catch rate on the first turn of a battle.' },
+  'Dusk Ball': { kind: 'ball', price: 100, slug: 'dusk-ball', desc: '×3 catch rate at night (uses your clock).' },
   'Master Ball': { kind: 'ball', price: 0, slug: 'master-ball', desc: 'Catches any wild Pokémon without fail.' },
 
-  'Potion': { kind: 'heal', amount: 20, price: 200, slug: 'potion', desc: 'Restores 20 HP.' },
-  'Super Potion': { kind: 'heal', amount: 60, price: 700, slug: 'super-potion', desc: 'Restores 60 HP.' },
-  'Hyper Potion': { kind: 'heal', amount: 120, price: 1500, slug: 'hyper-potion', desc: 'Restores 120 HP.' },
-  'Max Potion': { kind: 'heal', amount: 0, price: 2500, slug: 'max-potion', desc: 'Fully restores HP.' },
-  'Full Restore': { kind: 'heal', amount: 0, cure: true, price: 3000, slug: 'full-restore', desc: 'Fully restores HP and cures status.' },
-  'Revive': { kind: 'revive', price: 2000, slug: 'revive', desc: 'Revives a fainted Pokémon with half its HP.' },
-  'Max Revive': { kind: 'revive', full: true, price: 4000, slug: 'max-revive', desc: 'Revives a fainted Pokémon with full HP.' },
-  'Antidote': { kind: 'status', cures: ['psn', 'tox'], price: 100, slug: 'antidote', desc: 'Cures poison.' },
-  'Paralyze Heal': { kind: 'status', cures: ['par'], price: 300, slug: 'paralyze-heal', desc: 'Cures paralysis.' },
-  'Awakening': { kind: 'status', cures: ['slp'], price: 100, slug: 'awakening', desc: 'Wakes a sleeping Pokémon.' },
-  'Burn Heal': { kind: 'status', cures: ['brn'], price: 300, slug: 'burn-heal', desc: 'Heals a burn.' },
-  'Ice Heal': { kind: 'status', cures: ['frz'], price: 100, slug: 'ice-heal', desc: 'Thaws a frozen Pokémon.' },
-  'Full Heal': { kind: 'status', cures: 'all', price: 400, slug: 'full-heal', desc: 'Cures any status condition.' },
-  'Elixir': { kind: 'pp', all: true, amount: 10, price: 1800, slug: 'elixir', desc: 'Restores 10 PP to each move.' },
-  'Max Elixir': { kind: 'pp', all: true, amount: 0, price: 4500, slug: 'max-elixir', desc: 'Fully restores the PP of each move.' },
+  'Potion': { kind: 'heal', amount: 20, price: 20, slug: 'potion', desc: 'Restores 20 HP.' },
+  'Super Potion': { kind: 'heal', amount: 60, price: 70, slug: 'super-potion', desc: 'Restores 60 HP.' },
+  'Hyper Potion': { kind: 'heal', amount: 120, price: 150, slug: 'hyper-potion', desc: 'Restores 120 HP.' },
+  'Max Potion': { kind: 'heal', amount: 0, price: 250, slug: 'max-potion', desc: 'Fully restores HP.' },
+  'Full Restore': { kind: 'heal', amount: 0, cure: true, price: 300, slug: 'full-restore', desc: 'Fully restores HP and cures status.' },
+  'Revive': { kind: 'revive', price: 200, slug: 'revive', desc: 'Revives a fainted Pokémon with half its HP.' },
+  'Max Revive': { kind: 'revive', full: true, price: 400, slug: 'max-revive', desc: 'Revives a fainted Pokémon with full HP.' },
+  'Antidote': { kind: 'status', cures: ['psn', 'tox'], price: 10, slug: 'antidote', desc: 'Cures poison.' },
+  'Paralyze Heal': { kind: 'status', cures: ['par'], price: 30, slug: 'paralyze-heal', desc: 'Cures paralysis.' },
+  'Awakening': { kind: 'status', cures: ['slp'], price: 10, slug: 'awakening', desc: 'Wakes a sleeping Pokémon.' },
+  'Burn Heal': { kind: 'status', cures: ['brn'], price: 30, slug: 'burn-heal', desc: 'Heals a burn.' },
+  'Ice Heal': { kind: 'status', cures: ['frz'], price: 10, slug: 'ice-heal', desc: 'Thaws a frozen Pokémon.' },
+  'Full Heal': { kind: 'status', cures: 'all', price: 40, slug: 'full-heal', desc: 'Cures any status condition.' },
+  'Elixir': { kind: 'pp', all: true, amount: 10, price: 180, slug: 'elixir', desc: 'Restores 10 PP to each move.' },
+  'Max Elixir': { kind: 'pp', all: true, amount: 0, price: 450, slug: 'max-elixir', desc: 'Fully restores the PP of each move.' },
 
-  'Rare Candy': { kind: 'candy', price: 10000, slug: 'rare-candy', desc: 'Raises a Pokémon by one level.' },
-  'Exp. Candy S': { kind: 'expcandy', amount: 800, price: 1000, slug: 'exp-candy-s', desc: 'Gives 800 Exp. Points.' },
-  'Exp. Candy M': { kind: 'expcandy', amount: 3000, price: 3500, slug: 'exp-candy-m', desc: 'Gives 3,000 Exp. Points.' },
-  'Exp. Candy L': { kind: 'expcandy', amount: 10000, price: 10000, slug: 'exp-candy-l', desc: 'Gives 10,000 Exp. Points.' },
-  'Linking Cord': { kind: 'evo', price: 8000, slug: 'linking-cord', desc: 'Evolves Pokémon that evolve by trade or special conditions.' },
+  'Rare Candy': { kind: 'candy', price: 1000, slug: 'rare-candy', desc: 'Raises a Pokémon by one level.' },
+  'Exp. Candy S': { kind: 'expcandy', amount: 800, price: 100, slug: 'exp-candy-s', desc: 'Gives 800 Exp. Points.' },
+  'Exp. Candy M': { kind: 'expcandy', amount: 3000, price: 350, slug: 'exp-candy-m', desc: 'Gives 3,000 Exp. Points.' },
+  'Exp. Candy L': { kind: 'expcandy', amount: 10000, price: 1000, slug: 'exp-candy-l', desc: 'Gives 10,000 Exp. Points.' },
+  'Linking Cord': { kind: 'evo', price: 800, slug: 'linking-cord', desc: 'Evolves Pokémon that evolve by trade or special conditions.' },
 };
 
 // Evolution items (all used from the bag)
@@ -47,10 +47,50 @@ const EVO_ITEMS = {
 };
 const STONES = ['Fire Stone', 'Water Stone', 'Thunder Stone', 'Leaf Stone', 'Moon Stone', 'Sun Stone', 'Shiny Stone', 'Dusk Stone', 'Dawn Stone', 'Ice Stone'];
 for (const [name, slug] of Object.entries(EVO_ITEMS)) {
-  ITEMS[name] = { kind: 'evo', price: STONES.includes(name) ? 3000 : 5000, slug, desc: 'Makes certain Pokémon evolve.' };
+  ITEMS[name] = { kind: 'evo', price: STONES.includes(name) ? 300 : 500, slug, desc: 'Makes certain Pokémon evolve.' };
 }
 export const STONE_LIST = STONES;
 export const EVO_ITEM_LIST = Object.keys(EVO_ITEMS);
+
+// ---------- Difficulty modes ----------
+// Easy/Medium follow the regular games; Hard follows common "hard mode" rules (higher levels,
+// perfect-IV trainers, smart AI); Hell adds Nuzlocke rules on top (fainted = gone, no items in
+// trainer battles) with maxed-out opponents.
+export const DIFFICULTIES = {
+  easy: {
+    name: 'Easy', color: '#4cd07a',
+    levelMult: 0.85, ivs: 'low', evs: 0, ai: 'basic', extraFullRestores: 0,
+    expMult: 1.5, prizeMult: 1.5, priceMult: 0.75,
+    bag: { 'Poké Ball': 10, 'Potion': 5, 'Revive': 1 },
+    battleItems: true, permadeath: false,
+    rules: ['Opponents are 15% lower level', 'Weaker opponent stats and simpler AI', '+50% Exp. and prize money', 'Shop prices 25% off', 'Starts with 10 Poké Balls, 5 Potions and a Revive'],
+  },
+  medium: {
+    name: 'Medium', color: '#4aa3ff',
+    levelMult: 1, ivs: 'random', evs: 0, ai: 'normal', extraFullRestores: 0,
+    expMult: 1, prizeMult: 1, priceMult: 1,
+    bag: { 'Poké Ball': 5, 'Potion': 3 },
+    battleItems: true, permadeath: false,
+    rules: ['The standard experience, balanced like the main games', 'Random opponent IVs; smarter Gym Leaders and bosses', 'Normal Exp., prize money and shop prices', 'Starts with 5 Poké Balls and 3 Potions'],
+  },
+  hard: {
+    name: 'Hard', color: '#f2994a',
+    levelMult: 1.1, ivs: 'trainersMax', evs: 0, ai: 'smart', extraFullRestores: 1,
+    expMult: 1, prizeMult: 0.8, priceMult: 1.25,
+    bag: { 'Poké Ball': 3, 'Potion': 1 },
+    battleItems: true, permadeath: false,
+    rules: ['Opponents are 10% higher level', 'Every trainer has perfect IVs and battles smart', 'Bosses carry an extra Full Restore', 'Prize money −20%, shop prices +25%', 'Starts with 3 Poké Balls and 1 Potion'],
+  },
+  hell: {
+    name: 'Hell', color: '#eb5757',
+    levelMult: 1.2, ivs: 'allMax', evs: 252, ai: 'smart', extraFullRestores: 2,
+    expMult: 1, prizeMult: 0.5, priceMult: 1.5,
+    bag: { 'Poké Ball': 3 },
+    battleItems: false, permadeath: true,
+    rules: ['Nuzlocke rules: a Pokémon that faints is gone for good', 'No items during trainer battles (Poké Balls still work on wild Pokémon)', 'Opponents are 20% higher level with perfect IVs and trained EVs', 'Bosses carry two extra Full Restores', 'Prize money halved, shop prices +50%, no Revives', 'Starts with 3 Poké Balls'],
+  },
+};
+export const diffOf = run => DIFFICULTIES[run?.difficulty] || DIFFICULTIES.medium;
 
 export const BAG_POCKETS = [
   ['Poké Balls', ['ball']],

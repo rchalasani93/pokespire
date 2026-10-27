@@ -1,8 +1,8 @@
 // Run structure: three acts of branching map nodes, encounters, rewards and progression.
-import { DEX, REGIONS, idOf, movesAtLevel } from './data.js';
-import { createMon, stageForLevel, healMon, rand, pick, uid, maxHp } from './mechanics.js';
+import { DEX, MOVES, REGIONS, idOf, movesAtLevel } from './data.js';
+import { createMon, stageForLevel, healMon, rand, pick, uid, maxHp, expForLevel } from './mechanics.js';
 import {
-  ITEMS, TRAINER_CLASSES, TRAINER_NAMES, GYM_LEADERS, VILLAINS, ELITE_FOUR, CHAMPIONS, STONE_LIST, EVO_ITEM_LIST,
+  ITEMS, DIFFICULTIES, diffOf, TRAINER_CLASSES, TRAINER_NAMES, GYM_LEADERS, VILLAINS, ELITE_FOUR, CHAMPIONS, STONE_LIST, EVO_ITEM_LIST,
 } from './content.js';
 
 export const ACTS = [
@@ -51,13 +51,14 @@ export function rowLevel(act, row) {
 }
 
 // ---------- New run ----------
-export function newRun(starterId) {
+export function newRun(starterId, difficulty = 'medium') {
   const starter = createMon(starterId, 5);
   starter.fr = 70;
+  const diff = DIFFICULTIES[difficulty] ? difficulty : 'medium';
   const run = {
-    v: 1, id: uid(), startedAt: new Date().toISOString(), starter: starterId,
+    v: 1, id: uid(), startedAt: new Date().toISOString(), starter: starterId, difficulty: diff,
     act: 1, map: generateMap(1), pos: null, visited: [],
-    party: [starter], box: [], bag: { 'Poké Ball': 5, 'Potion': 3 }, money: 3000,
+    party: [starter], box: [], bag: { ...DIFFICULTIES[diff].bag }, money: 100, fallen: [],
     badges: [], beatenGyms: [], caught: [], league: null, battle: null, node: null,
     stats: { battles: 0, wins: 0, caught: 0, nodes: 0 },
   };
@@ -186,7 +187,7 @@ export function buildEncounter(run, node) {
       const maxLv = Math.max(...enemy.map(m => m.lv));
       return {
         kind: 'trainer', enemy, ai: act >= 2 ? 2 : 1,
-        trainer: { name: pick(TRAINER_NAMES), title: cls.title, sprite: cls.sprite, prize: cls.pay * maxLv * 2 },
+        trainer: { name: pick(TRAINER_NAMES), title: cls.title, sprite: cls.sprite, prize: Math.round(cls.pay * maxLv / 4) },
       };
     }
     case 'villain': {
@@ -197,7 +198,7 @@ export function buildEncounter(run, node) {
       const enemy = Array.from({ length: size }, () => makeTrainerMon(pick(v.pool), L - rand(2)));
       return {
         kind: 'villain', enemy, ai: admin ? 2 : 1,
-        trainer: { name: admin ? pick(v.admins) : 'Grunt', title: admin ? `${v.team} Admin` : v.team, sprite: v.grunt, prize: (admin ? 100 : 60) * L, quote: v.quote, team: v.team },
+        trainer: { name: admin ? pick(v.admins) : 'Grunt', title: admin ? `${v.team} Admin` : v.team, sprite: v.grunt, prize: (admin ? 25 : 15) * L, quote: v.quote, team: v.team },
       };
     }
     case 'gym': {
@@ -219,7 +220,7 @@ function gymSpec(leader, enemy) {
   const ace = Math.max(...enemy.map(m => m.lv));
   return {
     kind: 'gym', enemy, ai: 2, fullRestores: 1,
-    trainer: { name: leader.name, title: `${leader.region} Gym Leader`, sprite: leader.sprite, prize: 100 * ace, badge: `${leader.badge} Badge`, leader: leader.name, type: leader.type },
+    trainer: { name: leader.name, title: `${leader.region} Gym Leader`, sprite: leader.sprite, prize: 25 * ace, badge: `${leader.badge} Badge`, leader: leader.name, type: leader.type },
   };
 }
 
@@ -234,7 +235,7 @@ export function bossEncounter(run) {
     const enemy = teamFrom(v.boss.team, 4, a.bossLv - 3, 3, { perfectIvs: 3 });
     return {
       kind: 'villainBoss', enemy, ai: 2, fullRestores: 1,
-      trainer: { name: v.boss.name, title: v.boss.title, sprite: v.boss.sprite, prize: 150 * a.bossLv, quote: 'This is not the end...', team: v.team },
+      trainer: { name: v.boss.name, title: v.boss.title, sprite: v.boss.sprite, prize: 40 * a.bossLv, quote: 'This is not the end...', team: v.team },
     };
   }
   return null; // league is handled separately
@@ -263,14 +264,14 @@ export function leagueOpponent(run) {
     const m = ELITE_FOUR.find(e => e.name === name && e.region === region);
     return { info: m, title: 'Elite Four', spec: () => ({
       kind: 'e4', enemy: teamFrom(m.team, 5, base + L.stage, 2, { perfectIvs: 4 }), ai: 2, fullRestores: 1,
-      trainer: { name: m.name, title: 'Elite Four', sprite: m.sprite, prize: 160 * (base + L.stage + 2), type: m.type },
+      trainer: { name: m.name, title: 'Elite Four', sprite: m.sprite, prize: 40 * (base + L.stage + 2), type: m.type },
     }) };
   }
   const [name, region] = L.champion.split('|');
   const c = CHAMPIONS.find(e => e.name === name && e.region === region);
   return { info: c, title: 'Champion', spec: () => ({
     kind: 'champion', enemy: teamFrom(c.team, 6, base + 5, 3, { perfectIvs: 5 }), ai: 2, fullRestores: 2,
-    trainer: { name: c.name, title: 'Champion', sprite: c.sprite, prize: 200 * (base + 8) },
+    trainer: { name: c.name, title: 'Champion', sprite: c.sprite, prize: 50 * (base + 8) },
   }) };
 }
 
@@ -287,12 +288,12 @@ export function spinPokeStop(run) {
   else if (r < 0.22) items.push([pick(STONE_LIST), 1]);
   else if (r < 0.28) items.push([act >= 2 ? pick(EVO_ITEM_LIST) : 'Linking Cord', 1]);
   else if (r < 0.45) items.push([act === 3 ? 'Exp. Candy L' : act === 2 ? 'Exp. Candy M' : 'Exp. Candy S', 1 + rand(2)]);
-  else if (r < 0.6) items.push(['Revive', 1]);
+  else if (r < 0.6) items.push([diffOf(run).permadeath ? 'Full Heal' : 'Revive', 1]);
   else items.push([pick(['Antidote', 'Paralyze Heal', 'Awakening', 'Burn Heal', 'Full Heal']), 1]);
   if (Math.random() < 0.25) items.push(['Quick Ball', 1]);
   for (const [it, n] of items) addItem(run, it, n);
   let money = 0;
-  if (Math.random() < 0.3) { money = 500 * act + rand(4) * 250; run.money += money; }
+  if (Math.random() < 0.3) { money = 50 * act + rand(4) * 25; run.money += money; }
   return { items, money };
 }
 
@@ -308,14 +309,58 @@ export function martStock(run) {
     const extra = EVO_ITEM_LIST.filter(i => !STONE_LIST.includes(i));
     for (let i = 0; i < 4; i++) list.push(extra[(seed + i * 7) % extra.length]);
   }
-  return [...new Set(list)].map(name => ({ name, price: ITEMS[name].price }));
+  const hell = diffOf(run).permadeath;
+  return [...new Set(list)].filter(n => !(hell && ITEMS[n].kind === 'revive')).map(name => ({ name, price: priceOf(run, name) }));
 }
 
+export const priceOf = (run, name) => Math.max(1, Math.round(ITEMS[name].price * diffOf(run).priceMult));
+
 export function eliteReward(run) {
-  const options = [['Rare Candy', 1], [pick(STONE_LIST), 1], [pick(EVO_ITEM_LIST), 1], ['Ultra Ball', 3], ['Max Revive', 1]];
+  const options = [['Rare Candy', 1], [pick(STONE_LIST), 1], [pick(EVO_ITEM_LIST), 1], ['Ultra Ball', 3], [diffOf(run).permadeath ? 'Full Restore' : 'Max Revive', 1]];
   const r = pick(options);
   addItem(run, r[0], r[1]);
   return r;
+}
+
+// ---------- Difficulty ----------
+const WILD_PAY = { wild: 2, elite: 5, legendary: 8 };
+
+/** Adjust a freshly built encounter for the run's difficulty: levels, IVs/EVs, AI, items and money. */
+export function applyDifficulty(run, spec) {
+  const d = diffOf(run);
+  const trainer = !!spec.trainer;
+  const keepSpecies = spec.kind === 'legendary' || spec.kind === 'elite';
+  for (const m of spec.enemy) {
+    const lv = Math.max(2, Math.min(100, Math.round(m.lv * d.levelMult)));
+    if (lv !== m.lv) {
+      const id = keepSpecies ? m.id : stageForLevel(m.id, lv);
+      if (id !== m.id) { m.id = id; m.ab = pick(DEX[id].a); }
+      m.lv = lv;
+      m.exp = expForLevel(DEX[m.id].gr, lv);
+      m.moves = movesAtLevel(m.id, lv).map(x => ({ id: x, pp: MOVES[x].pp }));
+    }
+    if (d.ivs === 'low') m.iv = m.iv.map(v => Math.min(v, rand(16)));
+    if (d.ivs === 'allMax' || (d.ivs === 'trainersMax' && trainer)) m.iv = [31, 31, 31, 31, 31, 31];
+    if (d.evs) {
+      // Trained like a competitive Pokémon: max its better attacking stat and Speed
+      const b = DEX[m.id].b;
+      m.ev = [4, 0, 0, 0, 0, 252];
+      m.ev[b[1] >= b[3] ? 1 : 3] = 252;
+    }
+    m.hp = maxHp(m);
+  }
+  if (trainer) {
+    if (d.ai === 'basic') spec.ai = Math.min(spec.ai ?? 1, 1);
+    if (d.ai === 'smart') spec.ai = 2;
+    spec.trainer.prize = Math.round((spec.trainer.prize || 0) * d.prizeMult);
+    if (spec.fullRestores) spec.fullRestores += d.extraFullRestores;
+    spec.noItems = !d.battleItems;
+  } else {
+    if (d.ai === 'smart' && spec.kind !== 'wild') spec.ai = 2;
+    const maxLv = Math.max(...spec.enemy.map(m => m.lv));
+    spec.wildPrize = Math.round(maxLv * (WILD_PAY[spec.kind] || 2) * d.prizeMult);
+  }
+  return spec;
 }
 
 export function healParty(run) { run.party.forEach(healMon); }

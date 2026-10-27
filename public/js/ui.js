@@ -8,9 +8,9 @@ import {
 } from './mechanics.js';
 import {
   ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
-  spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem,
+  spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf,
 } from './game.js';
-import { ITEMS, BAG_POCKETS, trainerSpriteUrl } from './content.js';
+import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, trainerSpriteUrl } from './content.js';
 import { startBattle, applyItem } from './battle.js';
 import { renderBattle, beginBattle, onBattleAction, resumeBattleUI } from './battle-ui.js';
 import { playMusic, sfx, playCry, applyAudioSettings, unlockAudio } from './audio.js';
@@ -31,7 +31,7 @@ export function render() {
   const html = fn ? fn() : '';
   app().innerHTML = html + (S.modal ? renderModal() : '') + (S.run?.flow?.length && S.screen !== 'battle-playing' ? renderFlow() : '');
   document.getElementById('topbar-user').innerHTML = S.user
-    ? `<span>${esc(S.user.username)}</span>${S.run && S.screen !== 'menu' ? ` · <span class="money">₽${S.run.money.toLocaleString()}</span>` : ''}`
+    ? `<span>${esc(S.user.username)}</span>${S.run && S.screen !== 'menu' ? ` · <span class="money">$${S.run.money.toLocaleString()}</span>` : ''}`
     : '';
   afterRender();
 }
@@ -194,7 +194,7 @@ SCREENS.menu = () => {
     <div class="hero small">${img(artUrl(r ? r.party[0].id : 6), 'hero-art', '')}
       <h1>PokéSpire</h1><p class="muted">Welcome back, ${esc(S.user.username)}.</p></div>
     <div class="menu-buttons">
-      ${r ? `<button class="primary big" data-act="continueRun">Continue run<small>${ACTS[r.act - 1].name} · ${r.badges.length} badge${r.badges.length === 1 ? '' : 's'}</small></button>` : ''}
+      ${r ? `<button class="primary big" data-act="continueRun">Continue run<small>${diffOf(r).name} · ${ACTS[r.act - 1].name} · ${r.badges.length} badge${r.badges.length === 1 ? '' : 's'}</small></button>` : ''}
       <button class="${r ? '' : 'primary'} big" data-act="play">${r ? 'New run' : 'Play'}<small>Choose a starter and begin</small></button>
       <button class="big" data-act="openSettings">Settings<small>Sound and text speed</small></button>
       <button class="big" data-act="openHistory">History<small>Previous runs and Hall of Fame</small></button>
@@ -211,9 +211,9 @@ SCREENS.menu = () => {
 registerActions({
   play: () => {
     if (S.run) { S.modal = { type: 'confirm', text: 'Starting a new run will abandon your current one. It will be recorded in your history.', yes: 'abandonAndPlay' }; render(); return; }
-    go('starters', { region: 0 });
+    go('difficulty');
   },
-  abandonAndPlay: async () => { S.modal = null; await endRun('Abandoned'); go('starters', { region: 0 }); },
+  abandonAndPlay: async () => { S.modal = null; await endRun('Abandoned'); go('difficulty'); },
   continueRun: () => resumeRun(),
   openSettings: () => go('settings'),
   openHistory: async () => {
@@ -272,7 +272,7 @@ SCREENS.history = () => {
   const teamStrip = team => `<div class="team-strip">${(team || []).map(m => `<span title="${esc(m.name)} Lv ${m.lv}">${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', m.name)}<small>Lv ${m.lv}</small></span>`).join('')}</div>`;
   const runs = S.ui.loading ? '<p class="muted">Loading…</p>' : list.length ? list.map(h => `
     <article class="history-item ${h.result === 'Champion' ? 'win' : h.result === 'Defeated' ? 'loss' : ''}">
-      <div class="row"><strong>${esc(h.result)}</strong><span class="muted">${new Date(h.createdAt).toLocaleString()}</span></div>
+      <div class="row"><strong>${esc(h.result)} <span class="diff-badge" style="--dc:${(DIFFICULTIES[h.difficulty] || DIFFICULTIES.medium).color}">${(DIFFICULTIES[h.difficulty] || DIFFICULTIES.medium).name}</span></strong><span class="muted">${new Date(h.createdAt).toLocaleString()}</span></div>
       <p class="muted small">Starter: ${esc(DEX[h.starter]?.n || '?')} · Reached ${esc(h.reached || '')} · ${h.badges ?? 0} badges · ${h.caught ?? 0} caught · ${h.wins ?? 0} battles won${h.durationMin != null ? ` · ${h.durationMin} min` : ''}${h.defeatedBy ? ` · Lost to ${esc(h.defeatedBy)}` : ''}</p>
       ${teamStrip(h.team)}
     </article>`).join('') : '<p class="muted">No finished runs yet. Your completed, lost and abandoned runs will appear here.</p>';
@@ -293,6 +293,21 @@ SCREENS.history = () => {
 };
 registerActions({ historyTab: tab => go('history', { tab }) });
 
+// ---------- Difficulty ----------
+SCREENS.difficulty = () => {
+  playMusic('menu');
+  return `<section class="panel">
+    <div class="row"><h2>Choose a difficulty</h2><button data-act="back">Back</button></div>
+    <p class="muted">Every run starts with $100. Battles pay out based on the opponent's level, and Trainers pay more than wild Pokémon.</p>
+    <div class="difficulty-grid">${Object.entries(DIFFICULTIES).map(([key, d]) => `
+      <button class="difficulty" style="--dc:${d.color}" data-act="pickDifficulty" data-arg="${key}">
+        <strong>${d.name}</strong>
+        <ul>${d.rules.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+      </button>`).join('')}</div>
+  </section>`;
+};
+registerActions({ pickDifficulty: key => go('starters', { region: 0, difficulty: key }) });
+
 // ---------- Starter selection ----------
 function starterPool() {
   return [...new Set([...REGIONS[0].starters, ...S.profile.caught])].filter(id => DEX[id]);
@@ -304,7 +319,7 @@ SCREENS.starters = () => {
   const ids = pool.filter(id => regionOf(id) === region).sort((a, b) => a - b);
   const counts = REGIONS.map((_, i) => pool.filter(id => regionOf(id) === i).length);
   return `<section class="panel">
-    <div class="row"><h2>Choose your partner</h2><button data-act="back">Back</button></div>
+    <div class="row"><h2>Choose your partner <span class="diff-badge" style="--dc:${DIFFICULTIES[S.ui.difficulty || 'medium'].color}">${DIFFICULTIES[S.ui.difficulty || 'medium'].name}</span></h2><button data-act="toDifficulty">Back</button></div>
     <p class="muted">Your first run starts with the three Kanto starters. Every Pokémon you catch on a run joins this pool for future runs, sorted by its home region.</p>
     <div class="tabs wrap">${REGIONS.map((r, i) => `<button class="${i === region ? 'active' : ''}" data-act="starterRegion" data-arg="${i}">${r.name} <small>${counts[i]}</small></button>`).join('')}</div>
     <div class="starter-grid">
@@ -315,14 +330,16 @@ SCREENS.starters = () => {
   </section>`;
 };
 registerActions({
-  starterRegion: r => go('starters', { region: +r }),
+  toDifficulty: () => go('difficulty'),
+  starterRegion: r => go('starters', { region: +r, difficulty: S.ui.difficulty }),
   pickStarter: id => {
-    S.modal = { type: 'confirmStarter', id: +id };
+    S.modal = { type: 'confirmStarter', id: +id, difficulty: S.ui.difficulty || 'medium' };
     render();
   },
   confirmStarter: async id => {
+    const difficulty = S.modal?.difficulty || 'medium';
     S.modal = null;
-    S.run = newRun(+id);
+    S.run = newRun(+id, difficulty);
     S.profile.stats.runs++;
     persistProfile();
     playCry(+id);
@@ -364,7 +381,7 @@ SCREENS.map = () => {
   }).join('');
   return `<section class="map-layout">
     <div class="panel map-panel">
-      <div class="row"><div><p class="eyebrow">${esc(ACTS[run.act - 1].name)}</p><h2>Choose your path</h2></div>
+      <div class="row"><div><p class="eyebrow">${esc(ACTS[run.act - 1].name)} <span class="diff-badge" style="--dc:${diffOf(run).color}">${diffOf(run).name}</span></p><h2>Choose your path</h2></div>
         <span class="muted">Boss: ${esc(bossLabel())}</span></div>
       <div class="map" style="height:${height}px"><svg width="100%" height="${height}">${lines}</svg>${btns}</div>
       <div class="legend">${Object.entries(NODE_INFO).filter(([k]) => k !== 'boss').map(([, v]) => `<span title="${esc(v.desc)}">${v.icon} ${v.label}</span>`).join('')}</div>
@@ -379,12 +396,14 @@ function bossLabel() {
 function sidePanel() {
   const run = S.run;
   return `<aside class="panel side">
+    <div class="wallet"><span>Money</span><b>$${run.money.toLocaleString()}</b></div>
     <h3>Team <small class="muted">${run.party.length}/6 · Box ${run.box.length}</small></h3>
     <div class="party-list">${run.party.map((m, i) => monCard(m, i)).join('')}</div>
     <div class="row gap wrap"><button data-act="openBag">Bag</button><button data-act="openTeam">Team</button></div>
     <h3>Badges <small class="muted">${run.badges.length}</small></h3>
     <div class="badges">${run.badges.length ? run.badges.map(b => `<span class="badge" title="${esc(b.leader)}">${esc(b.name)}</span>`).join('') : '<span class="muted small">Defeat Gym Leaders to earn badges.</span>'}</div>
     <p class="muted small">Battles won: ${run.stats.wins} · Caught: ${run.stats.caught}</p>
+    ${run.fallen?.length ? `<p class="muted small">Fallen: ${run.fallen.map(f => esc(f.name)).join(', ')}</p>` : ''}
     <div class="row gap wrap"><button class="ghost" data-act="toMenu">Save & quit</button><button class="ghost danger" data-act="abandonRun">Abandon run</button></div>
   </aside>`;
 }
@@ -425,6 +444,7 @@ function visitNode(id) {
 
 export function launchBattle(spec) {
   const run = S.run;
+  applyDifficulty(run, spec);
   const events = startBattle(run, spec);
   run.battle.node = spec.node || spec.kind;
   run.stats.battles++;
@@ -439,7 +459,7 @@ SCREENS.node = () => {
     return `<section class="panel narrow center-text">
       <p class="eyebrow">PokéStop</p>
       <div class="pokestop ${n.spun ? 'spun' : ''}">🔷</div>
-      ${n.spun ? `<h2>Items received</h2><ul class="loot">${n.result.items.map(([it, c]) => `<li>${itemImg(it)} ${esc(it)} ×${c}</li>`).join('')}${n.result.money ? `<li>💰 ₽${n.result.money.toLocaleString()}</li>` : ''}</ul>
+      ${n.spun ? `<h2>Items received</h2><ul class="loot">${n.result.items.map(([it, c]) => `<li>${itemImg(it)} ${esc(it)} ×${c}</li>`).join('')}${n.result.money ? `<li>💰 $${n.result.money.toLocaleString()}</li>` : ''}</ul>
         <button class="primary" data-act="leaveNode">Continue</button>`
         : `<h2>Spin the Photo Disc</h2><p class="muted">PokéStops hand out free supplies.</p><button class="primary big" data-act="spinStop">Spin!</button>`}
     </section>`;
@@ -447,10 +467,10 @@ SCREENS.node = () => {
   if (n.type === 'mart') {
     const stock = martStock(run);
     return `<section class="panel">
-      <div class="row"><div><p class="eyebrow">PokéMart</p><h2>Welcome! How may I help you?</h2></div><span class="money big-money">₽${run.money.toLocaleString()}</span></div>
+      <div class="row"><div><p class="eyebrow">PokéMart</p><h2>Welcome! How may I help you?</h2></div><span class="money big-money">$${run.money.toLocaleString()}</span></div>
       <div class="shop">${stock.map(s => `<div class="shop-item">
         ${itemImg(s.name)}<div><strong>${esc(s.name)}</strong><p class="muted small">${esc(ITEMS[s.name].desc)}</p><small>In bag: ${run.bag[s.name] || 0}</small></div>
-        <div class="buy"><span>₽${s.price.toLocaleString()}</span>
+        <div class="buy"><span>$${s.price.toLocaleString()}</span>
           <button data-act="buy" data-arg="${esc(s.name)}|1" ${run.money < s.price ? 'disabled' : ''}>Buy</button>
           <button data-act="buy" data-arg="${esc(s.name)}|5" ${run.money < s.price * 5 ? 'disabled' : ''}>×5</button></div></div>`).join('')}</div>
       <div class="row gap"><button data-act="openBag">Bag</button><button class="primary" data-act="leaveNode">Leave</button></div>
@@ -488,7 +508,7 @@ registerActions({
   },
   buy: arg => {
     const [name, qty] = arg.split('|');
-    const cost = ITEMS[name].price * +qty;
+    const cost = priceOf(S.run, name) * +qty;
     if (S.run.money < cost) { sfx('error'); return; }
     S.run.money -= cost;
     addItem(S.run, name, +qty);
@@ -546,7 +566,7 @@ function renderModal() {
   } else if (m.type === 'confirmStarter') {
     const sp = DEX[m.id];
     body = `<div class="center-text">${img(artUrl(m.id), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
-      <p class="muted">Start your journey with ${sp.n}?</p></div>
+      <p class="muted">Start a ${DIFFICULTIES[m.difficulty].name} run with ${sp.n}?</p></div>
       <div class="row gap"><button data-act="closeModal">Not yet</button><button class="primary" data-act="confirmStarter" data-arg="${m.id}">I choose you!</button></div>`;
   } else if (m.type === 'team') {
     body = `<h2>Team</h2><div class="party-list">${S.run.party.map((x, i) => monCard(x, i)).join('')}</div>
@@ -803,6 +823,16 @@ export function finishBattle() {
   }
   if (result === 'win' || result === 'caught') run.stats.wins += result === 'win' ? 1 : 0;
 
+  // Hell difficulty: Nuzlocke rules — fainted Pokémon are gone for good
+  if (diffOf(run).permadeath) {
+    const lost = run.party.filter(m => m.hp <= 0);
+    if (lost.length) {
+      run.party = run.party.filter(m => m.hp > 0);
+      run.fallen = [...(run.fallen || []), ...partySummary(lost)];
+      for (const m of lost) steps.push({ type: 'msg', text: `${monName(m)} fainted and is gone for good. Rest well, ${monName(m)}.` });
+    }
+  }
+
   if (result === 'caught') {
     const mon = b.caughtMon;
     const where = storeCaught(run, mon);
@@ -931,7 +961,7 @@ export async function endRun(result, defeatedBy = null) {
   cancelRunSave();
   const reached = run.league ? (run.league.stage >= 5 ? 'Hall of Fame' : run.league.stage === 4 ? 'Champion' : `Elite Four ${run.league.stage + 1}`) : `Act ${run.act}, floor ${run.pos ? run.map.nodes[run.pos].r + 1 : 0}`;
   const entry = {
-    result, starter: run.starter, act: run.act, reached, badges: run.badges.length,
+    result, difficulty: run.difficulty || 'medium', starter: run.starter, act: run.act, reached, badges: run.badges.length,
     caught: run.stats.caught, wins: run.stats.wins, team: partySummary(run.party),
     startedAt: run.startedAt, durationMin: Math.round((Date.now() - new Date(run.startedAt).getTime()) / 60000),
     ...(defeatedBy ? { defeatedBy } : {}),

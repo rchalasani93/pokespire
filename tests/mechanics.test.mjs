@@ -73,14 +73,14 @@ assert.ok(y > 80 && y < 120, 'exp ' + y);
 // Simulate many full runs' battles headlessly to catch engine crashes
 let crashes = 0, turns = 0;
 for (let r = 0; r < 300; r++) {
-  const run = G.newRun(G.REGIONS[r % 9].starters[r % 3]);
+  const run = G.newRun(G.REGIONS[r % 9].starters[r % 3], ['easy', 'medium', 'hard', 'hell'][r % 4]);
   for (let i = 0; i < 4; i++) run.party.push(M.createMon(1 + Math.floor(Math.random() * 1025), 5 + r % 50));
   run.party.forEach(m => { m.lv = 5 + (r % 60); m.exp = M.expForLevel(DEX[m.id].gr, m.lv); m.hp = M.maxHp(m); });
   const kinds = ['wild', 'trainer', 'villain', 'elite', 'gym', 'legendary'];
   run.act = 1 + (r % 3);
   const node = { type: kinds[r % kinds.length], r: r % 11 };
   try {
-    const spec = G.buildEncounter(run, node);
+    const spec = G.applyDifficulty(run, G.buildEncounter(run, node));
     Bt.startBattle(run, spec);
     for (let t = 0; t < 300 && !run.battle.over; t++) {
       const b = run.battle;
@@ -100,6 +100,31 @@ for (let r = 0; r < 300; r++) {
   } catch (e) { crashes++; if (crashes < 4) console.error(e); }
 }
 assert.equal(crashes, 0, 'battle engine crashed');
+
+// Difficulty modes
+{
+  const lv = d => { const run = G.newRun(1, d); run.act = 2; const node = { type: 'trainer', r: 5 }; let t = 0; for (let i = 0; i < 40; i++) t += Math.max(...G.applyDifficulty(run, G.buildEncounter(run, node)).enemy.map(m => m.lv)); return t / 40; };
+  const easy = lv('easy'), med = lv('medium'), hard = lv('hard'), hell = lv('hell');
+  assert.ok(easy < med && med < hard && hard < hell, `levels should rise with difficulty: ${easy} ${med} ${hard} ${hell}`);
+  const hellRun = G.newRun(1, 'hell'); hellRun.act = 1;
+  const hs = G.applyDifficulty(hellRun, G.buildEncounter(hellRun, { type: 'trainer', r: 3 }));
+  assert.ok(hs.enemy.every(m => m.iv.every(v => v === 31) && m.ev[5] === 252), 'Hell trainers have max IVs/EVs');
+  assert.equal(hs.noItems, true);
+  assert.equal(hellRun.money, 100);
+  assert.ok(!G.martStock(hellRun).some(i => i.name === 'Revive'), 'no Revives on Hell');
+  const easyRun = G.newRun(1, 'easy');
+  const potion = n => G.martStock(n).find(i => i.name === 'Poké Ball').price;
+  assert.ok(potion(easyRun) < potion(G.newRun(1, 'medium')) && potion(G.newRun(1, 'medium')) < potion(hellRun));
+  const ws = G.applyDifficulty(G.newRun(1, 'medium'), { kind: 'wild', enemy: [M.createMon(16, 10)], canCatch: true });
+  assert.equal(ws.wildPrize, 20, 'wild Lv 10 pays $20 on Medium');
+  // Prize money reaches the wallet when a wild battle is won
+  const run = G.newRun(7, 'medium');
+  run.party[0] = M.createMon(150, 100, { moves: ['psystrike'] });
+  Bt.startBattle(run, G.applyDifficulty(run, { kind: 'wild', enemy: [M.createMon(16, 5)], canCatch: true, canRun: true }));
+  Bt.playerAction(run, { type: 'move', index: 0 });
+  assert.equal(run.battle.over, 'win');
+  assert.equal(run.money, 100 + run.battle.wildPrize);
+}
 
 // League setup
 const run = G.newRun(1); run.act = 3; G.startLeague(run);

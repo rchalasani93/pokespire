@@ -5,7 +5,7 @@ import { DEX, MOVES, typeEffect } from './data.js';
 import {
   calcStats, maxHp, monName, expYield, gainExp, addEvs, catchAttempt, rand, pick, uid,
 } from './mechanics.js';
-import { ITEMS } from './content.js';
+import { ITEMS, diffOf } from './content.js';
 
 const STRUGGLE = { n: 'Struggle', t: '???', c: 'P', p: 50, a: 0, pp: 1, recoilMax: 0.25 };
 const STAGE_NAMES = { atk: 'Attack', def: 'Defense', spa: 'Sp. Atk', spd: 'Sp. Def', spe: 'Speed', accuracy: 'accuracy', evasion: 'evasiveness' };
@@ -25,7 +25,7 @@ export function startBattle(run, spec) {
     ai: spec.ai ?? (spec.trainer ? 1 : 0), fullRestores: spec.fullRestores || 0,
     pv: freshVolatile(), ev: freshVolatile(), participants: [run.party[pi].uid],
     turn: 0, runAttempts: 0, over: null, phase: 'choose', learnQueue: [], leveled: [], log: [],
-    caughtMon: null, exp: {},
+    caughtMon: null, exp: {}, noItems: !!spec.noItems, wildPrize: spec.wildPrize || 0,
   };
   run.battle = b;
   const out = [];
@@ -184,6 +184,7 @@ function useBattleItem(run, out, { item, target, moveIndex }) {
   const it = ITEMS[item];
   const mon = run.party[target];
   if (!it || !run.bag[item] || !mon) return;
+  if (run.battle.noItems) { say(run, out, 'Items can\'t be used in trainer battles on Hell difficulty!'); return; }
   const res = applyItem(mon, item, moveIndex);
   if (!res.ok) { say(run, out, res.msg || "It won't have any effect."); return; }
   run.bag[item]--;
@@ -242,6 +243,7 @@ function throwBall(run, out, ball) {
     say(run, out, `Gotcha! ${monName(E)} was caught!`, { sfx: 'caught', caught: true });
     b.caughtMon = E;
     b.over = 'caught';
+    payWild(run, out);
     // Catching awards experience, like Gen 6+
     awardExp(run, out, E);
     return true;
@@ -608,7 +610,9 @@ function checkFaints(run, out) {
         say(run, out, `You defeated ${b.trainer.title} ${b.trainer.name}!`, { sfx: 'victory' });
         if (b.trainer.quote) say(run, out, `${b.trainer.name}: "${b.trainer.quote}"`);
         const prize = b.trainer.prize || 0;
-        if (prize) { run.money += prize; say(run, out, `You got ₽${prize.toLocaleString()} for winning!`); }
+        if (prize) { run.money += prize; say(run, out, `You got $${prize.toLocaleString()} for winning!`, { sfx: 'coin' }); }
+      } else {
+        payWild(run, out);
       }
     }
   }
@@ -628,13 +632,21 @@ function checkFaints(run, out) {
   }
 }
 
+function payWild(run, out) {
+  const b = run.battle;
+  if (!b.wildPrize || b.paid) return;
+  b.paid = true;
+  run.money += b.wildPrize;
+  say(run, out, `You picked up $${b.wildPrize.toLocaleString()}!`, { sfx: 'coin' });
+}
+
 function awardExp(run, out, defeated) {
   const b = run.battle;
   const trainer = !!b.trainer;
   for (const mon of run.party) {
     if (mon.hp <= 0 || mon.lv >= 100) continue;
     const participated = b.participants.includes(mon.uid);
-    const amount = expYield(defeated, mon.lv, { trainer, share: !participated });
+    const amount = Math.max(1, Math.round(expYield(defeated, mon.lv, { trainer, share: !participated }) * diffOf(run).expMult));
     addEvs(mon, defeated.id);
     const before = mon.lv;
     say(run, out, `${monName(mon)} gained ${amount.toLocaleString()} Exp. Points!`, { sfx: participated ? 'exp' : null });

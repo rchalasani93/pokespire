@@ -93,6 +93,7 @@ function battleScreen() {
   const fx = B.fx || {};
   const enemyBalls = b.trainer ? `<div class="team-balls">${b.enemy.map(m => `<i class="${m.hp > 0 ? '' : 'out'}"></i>`).join('')}</div>` : '';
   const scene = `<div class="scene kind-${b.kind}">
+    <div class="wallet-chip">$${run.money.toLocaleString()}</div>
     ${b.trainer ? `<img class="trainer-sprite" src="${trainerSpriteUrl(b.trainer.sprite)}" alt="" onerror="this.remove()">` : ''}
     <div class="hud foe">
       <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' ✦' : ''}</strong><span>Lv ${E?.lv}</span></div>
@@ -147,7 +148,7 @@ function controls() {
       const meds = Object.entries(run.bag).filter(([k, v]) => v > 0 && ['heal', 'revive', 'status', 'pp'].includes(ITEMS[k]?.kind));
       return `<div class="bag-battle">
         ${b.canCatch ? `<h4>Poké Balls</h4><div class="chip-row">${balls.length ? balls.map(([k, v]) => `<button data-act="bBall" data-arg="${esc(k)}">${esc(k)} ×${v}</button>`).join('') : '<span class="muted small">No Poké Balls left.</span>'}</div>` : '<p class="muted small">You can\'t catch another Trainer\'s Pokémon!</p>'}
-        <h4>Medicine</h4><div class="chip-row">${meds.length ? meds.map(([k, v]) => `<button data-act="bMed" data-arg="${esc(k)}" title="${esc(ITEMS[k].desc)}">${esc(k)} ×${v}</button>`).join('') : '<span class="muted small">No medicine.</span>'}</div>
+        <h4>Medicine</h4>${b.noItems ? '<p class="muted small">No items in trainer battles on Hell difficulty.</p>' : `<div class="chip-row">${meds.length ? meds.map(([k, v]) => `<button data-act="bMed" data-arg="${esc(k)}" title="${esc(ITEMS[k].desc)}">${esc(k)} ×${v}</button>`).join('') : '<span class="muted small">No medicine.</span>'}</div>`}
       </div><button class="ghost back-btn" data-act="bMode" data-arg="main">Back</button>`;
     }
     case 'target':

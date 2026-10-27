@@ -8,6 +8,21 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Main menu.** Continue run, Play, Settings (master, music and sound-effect volume, mute, text speed), and History (previous runs plus the Hall of Fame).
 
+**Difficulty.** After clicking Play you pick a mode:
+
+| | Easy | Medium | Hard | Hell |
+| --- | --- | --- | --- | --- |
+| Opponent levels | −15% | standard | +10% | +20% |
+| Opponent stats | weaker IVs | random IVs | perfect IVs for trainers | perfect IVs and trained EVs for all |
+| Trainer AI | simple | smart bosses | smart everywhere | smart everywhere |
+| Boss Full Restores | standard | standard | +1 | +2 |
+| Exp. | ×1.5 | ×1 | ×1 | ×1 |
+| Prize money / shop prices | ×1.5 / −25% | ×1 / ×1 | ×0.8 / +25% | ×0.5 / +50% |
+| Starting bag | 10 Poké Balls, 5 Potions, Revive | 5 Poké Balls, 3 Potions | 3 Poké Balls, 1 Potion | 3 Poké Balls |
+| Special rules | — | — | — | Nuzlocke: fainted Pokémon are gone for good, no items in trainer battles, no Revives |
+
+**Money.** Every run starts with $100, shown on the map, in battle and at the PokéMart. Winning a battle pays out based on the opponent's level: wild Pokémon pay $2 per level (Elite Pokémon $5, Legendaries $8), and Trainers pay more, from $4 per level for a Youngster up to $50 per level for the Champion.
+
 **Starters by region.** Your first run offers the three Kanto starters. Every Pokémon you catch, on any run, joins the starter pool for future runs, grouped by its home region (Kanto through Paldea).
 
 **Main-series mechanics:**
