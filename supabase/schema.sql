@@ -67,8 +67,11 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+-- Only the trigger should run this, never the public API
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
--- Lets the sign-up form check a username before creating the account
+-- Lets the sign-up form check a username before creating the account.
+-- Callable without signing in on purpose; it only answers yes or no.
 create or replace function public.username_available(name text)
 returns boolean
 language sql
