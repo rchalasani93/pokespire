@@ -29,6 +29,15 @@ export const ITEMS = {
   'Exp. Candy S': { kind: 'expcandy', amount: 800, price: 100, slug: 'exp-candy-s', desc: 'Gives 800 Exp. Points.' },
   'Exp. Candy M': { kind: 'expcandy', amount: 3000, price: 350, slug: 'exp-candy-m', desc: 'Gives 3,000 Exp. Points.' },
   'Exp. Candy L': { kind: 'expcandy', amount: 10000, price: 1000, slug: 'exp-candy-l', desc: 'Gives 10,000 Exp. Points.' },
+  // EV training (Gen 8+ rules: +10 EVs, up to the 252 cap) and Hyper Training (needs Lv 50)
+  'HP Up': { kind: 'vitamin', stat: 0, price: 1000, slug: 'hp-up', desc: '+10 HP EVs (up to 252).' },
+  'Protein': { kind: 'vitamin', stat: 1, price: 1000, slug: 'protein', desc: '+10 Attack EVs (up to 252).' },
+  'Iron': { kind: 'vitamin', stat: 2, price: 1000, slug: 'iron', desc: '+10 Defense EVs (up to 252).' },
+  'Calcium': { kind: 'vitamin', stat: 3, price: 1000, slug: 'calcium', desc: '+10 Sp. Atk EVs (up to 252).' },
+  'Zinc': { kind: 'vitamin', stat: 4, price: 1000, slug: 'zinc', desc: '+10 Sp. Def EVs (up to 252).' },
+  'Carbos': { kind: 'vitamin', stat: 5, price: 1000, slug: 'carbos', desc: '+10 Speed EVs (up to 252).' },
+  'Bottle Cap': { kind: 'cap', price: 0, slug: 'bottle-cap', desc: 'Hyper Training: raises a Lv 50+ Pokémon\'s lowest IV to 31.' },
+  'Gold Bottle Cap': { kind: 'cap', all: true, price: 0, slug: 'gold-bottle-cap', desc: 'Hyper Training: raises all of a Lv 50+ Pokémon\'s IVs to 31.' },
   'Linking Cord': { kind: 'evo', price: 800, slug: 'linking-cord', desc: 'Evolves Pokémon that evolve by trade or special conditions.' },
 };
 
@@ -95,7 +104,8 @@ export const diffOf = run => DIFFICULTIES[run?.difficulty] || DIFFICULTIES.mediu
 export const BAG_POCKETS = [
   ['Poké Balls', ['ball']],
   ['Medicine', ['heal', 'revive', 'status', 'pp']],
-  ['Other', ['candy', 'expcandy', 'evo']],
+  ['Training', ['candy', 'expcandy', 'vitamin', 'cap']],
+  ['Evolution', ['evo']],
 ];
 
 // ---------- Trainer classes for random trainer battles ----------

@@ -29,6 +29,10 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Admin / God mode.** Accounts with `is_admin` set in the database get an Admin panel (main menu and map): God mode (your team can't be hurt, every hit knocks out, every Poké Ball catches), +$10,000, 99 of every item, team level-ups, adding any Pokémon, skipping to Act II, Act III or the League, and unlocking every Pokémon as a starter. Players can't set the flag themselves. Grant it in the Supabase SQL Editor with `update public.profiles set is_admin = true where username = 'YourName';`. Runs where God mode was used are tagged in history.
 
+**IVs, EVs, natures and abilities.** Each Pokémon's summary shows base stats, IVs (with the games' judge rating), EVs and final stats, its nature's effect, its ability with a description, and how and when it evolves (with progress, e.g. friendship or items in the bag). EVs are earned in battle and from vitamins (HP Up, Protein, Iron, Calcium, Zinc, Carbos: +10 each, up to 252 per stat and 510 total). Bottle Caps (Hyper Training, Lv 50+) raise IVs to 31. Every nature and ability you catch is unlocked for that Pokémon's whole evolution family. You can then switch a Pokémon to any unlocked nature or ability from its summary, or pick one when choosing a starter.
+
+**Filter and sort.** The starter screen, Team and Box can be searched by name, filtered by type (and region), and sorted by Dex No., name, level, HP, base stat total, each stat, IV total or EV total.
+
 **Starters by region.** Your first run offers the three Kanto starters. Every Pokémon you catch, on any run, joins the starter pool for future runs, grouped by its home region (Kanto through Paldea).
 
 **Main-series mechanics:**

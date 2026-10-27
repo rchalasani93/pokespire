@@ -15,6 +15,17 @@ export function natureMod(nature, statIdx) {
   return statIdx === up ? 1.1 : statIdx === down ? 0.9 : 1;
 }
 
+export const STAT_SHORT = ['HP', 'Atk', 'Def', 'SpA', 'SpD', 'Spe'];
+/** e.g. "Adamant (+Atk, −SpA)" or "Hardy (neutral)" */
+export function natureLabel(n) {
+  const up = NATURE_STAT[Math.floor(n / 5)], down = NATURE_STAT[n % 5];
+  return up === down ? `${NATURES[n]} (neutral)` : `${NATURES[n]} (+${STAT_SHORT[up]}, −${STAT_SHORT[down]})`;
+}
+/** The games' IV judge wording (Scarlet/Violet). */
+export function ivJudge(v) {
+  return v === 31 ? 'Best' : v === 30 ? 'Fantastic' : v >= 26 ? 'Very good' : v >= 16 ? 'Pretty good' : v >= 1 ? 'Decent' : 'No good';
+}
+
 export const rand = n => Math.floor(Math.random() * n);
 export const pick = arr => arr[rand(arr.length)];
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);

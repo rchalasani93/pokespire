@@ -51,9 +51,12 @@ export function rowLevel(act, row) {
 }
 
 // ---------- New run ----------
-export function newRun(starterId, difficulty = 'medium', mode = 'classic') {
+export function newRun(starterId, difficulty = 'medium', mode = 'classic', choice = {}) {
   const starter = createMon(starterId, 5);
   starter.fr = 70;
+  if (Number.isInteger(choice.nat) && choice.nat >= 0 && choice.nat < 25) starter.nat = choice.nat;
+  if (choice.ab && [...DEX[starterId].a, DEX[starterId].h].includes(choice.ab)) starter.ab = choice.ab;
+  starter.hp = maxHp(starter);
   const diff = DIFFICULTIES[difficulty] ? difficulty : 'medium';
   const run = {
     v: 1, id: uid(), startedAt: new Date().toISOString(), starter: starterId, difficulty: diff,
@@ -331,6 +334,7 @@ export function spinPokeStop(run) {
   const items = [[ball, 2 + rand(3)], [potion, 1 + rand(2)]];
   const r = Math.random();
   if (r < 0.06) items.push(['Rare Candy', 1]);
+  else if (r < 0.1) items.push([act === 3 ? 'Gold Bottle Cap' : 'Bottle Cap', 1]);
   else if (r < 0.22) items.push([pick(STONE_LIST), 1]);
   else if (r < 0.28) items.push([act >= 2 ? pick(EVO_ITEM_LIST) : 'Linking Cord', 1]);
   else if (r < 0.45) items.push([act === 3 ? 'Exp. Candy L' : act === 2 ? 'Exp. Candy M' : 'Exp. Candy S', 1 + rand(2)]);
@@ -346,6 +350,7 @@ export function spinPokeStop(run) {
 export function martStock(run) {
   const act = run.act;
   const list = ['Poké Ball', 'Great Ball', 'Potion', 'Super Potion', 'Antidote', 'Paralyze Heal', 'Awakening', 'Burn Heal', 'Ice Heal', 'Revive', 'Exp. Candy S'];
+  list.push('HP Up', 'Protein', 'Iron', 'Calcium', 'Zinc', 'Carbos');
   if (act >= 2) list.push('Ultra Ball', 'Quick Ball', 'Dusk Ball', 'Hyper Potion', 'Full Heal', 'Elixir', 'Exp. Candy M', 'Linking Cord');
   if (act >= 3) list.push('Max Potion', 'Full Restore', 'Max Revive', 'Max Elixir', 'Exp. Candy L');
   list.push(...STONE_LIST);
@@ -362,7 +367,7 @@ export function martStock(run) {
 export const priceOf = (run, name) => Math.max(1, Math.round(ITEMS[name].price * diffOf(run).priceMult));
 
 export function eliteReward(run) {
-  const options = [['Rare Candy', 1], [pick(STONE_LIST), 1], [pick(EVO_ITEM_LIST), 1], ['Ultra Ball', 3], [diffOf(run).permadeath ? 'Full Restore' : 'Max Revive', 1]];
+  const options = [['Rare Candy', 1], ['Bottle Cap', 1], ['Bottle Cap', 1], ['Gold Bottle Cap', 1], [pick(STONE_LIST), 1], [pick(EVO_ITEM_LIST), 1], ['Ultra Ball', 3], [diffOf(run).permadeath ? 'Full Restore' : 'Max Revive', 1]];
   const r = pick(options);
   addItem(run, r[0], r[1]);
   return r;

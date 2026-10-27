@@ -4,10 +4,11 @@ export const MOVES = {};
 export const LEARN = {};
 export const TYPES = {};
 export const BY_NAME = {};
+export const ABILITIES = {};
 
 export async function loadData() {
-  const files = ['pokedex', 'moves', 'learnsets', 'types'];
-  const [dex, moves, learn, types] = await Promise.all(
+  const files = ['pokedex', 'moves', 'learnsets', 'types', 'abilities'];
+  const [dex, moves, learn, types, abilities] = await Promise.all(
     files.map(f => fetch(new URL(`../data/${f}.json`, import.meta.url)).then(r => {
       if (!r.ok) throw new Error(`Failed to load ${f}.json`);
       return r.json();
@@ -17,6 +18,7 @@ export async function loadData() {
   Object.assign(MOVES, moves);
   Object.assign(LEARN, learn);
   Object.assign(TYPES, types);
+  Object.assign(ABILITIES, abilities);
   for (const [id, s] of Object.entries(DEX)) {
     s.id = +id;
     BY_NAME[s.n.toLowerCase()] = +id;
@@ -81,3 +83,11 @@ export function movesAtLevel(id, level) {
 
 /** Moves newly learned when reaching exactly `level` (0 = on evolution). */
 export const movesLearnedAt = (id, level) => (LEARN[id] || []).filter(([lv]) => lv === level).map(x => x[1]);
+
+/** First stage of a Pokémon's evolution family (e.g. Charizard → Charmander). */
+export function familyRoot(id) {
+  for (let guard = 0; guard < 4 && DEX[id]?.p; guard++) id = DEX[id].p;
+  return id;
+}
+
+export const bst = id => DEX[id].b.reduce((a, b) => a + b, 0);

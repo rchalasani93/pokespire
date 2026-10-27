@@ -177,6 +177,22 @@ assert.equal(crashes, 0, 'battle engine crashed');
   assert.equal(run.battle.over, 'caught', 'God mode always catches');
 }
 
+// EV training and Hyper Training
+{
+  const mon = M.createMon(6, 40);
+  mon.ev = [0, 0, 0, 0, 0, 0];
+  for (let i = 0; i < 30; i++) Bt.applyItem(mon, 'Carbos');
+  assert.equal(mon.ev[5], 252, 'vitamins stop at 252');
+  assert.equal(Bt.applyItem(mon, 'Carbos').ok, false);
+  mon.iv = [1, 31, 31, 31, 31, 31];
+  assert.equal(Bt.applyItem(mon, 'Bottle Cap').ok, false, 'Hyper Training needs Lv 50');
+  mon.lv = 50;
+  assert.ok(Bt.applyItem(mon, 'Bottle Cap').ok);
+  assert.deepEqual(mon.iv, [31, 31, 31, 31, 31, 31]);
+  assert.equal(M.natureLabel(3), 'Adamant (+Atk, −SpA)');
+  assert.equal(M.ivJudge(31), 'Best');
+}
+
 // League setup
 const run = G.newRun(1); run.act = 3; G.startLeague(run);
 assert.equal(run.league.members.length, 4);

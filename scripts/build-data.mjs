@@ -134,9 +134,20 @@ for (const def of Dex.types.all()) {
   }
 }
 
+// Ability descriptions for every ability a kept species can have
+const abilities = {};
+for (const sp of Object.values(pokedex)) {
+  for (const name of [...sp.a, ...(sp.h ? [sp.h] : [])]) {
+    if (abilities[name]) continue;
+    const ab = Dex.abilities.get(name);
+    abilities[name] = ab.exists ? (ab.shortDesc || ab.desc || '') : '';
+  }
+}
+
 mkdirSync('public/data', { recursive: true });
 writeFileSync('public/data/pokedex.json', JSON.stringify(pokedex));
 writeFileSync('public/data/moves.json', JSON.stringify(moves));
 writeFileSync('public/data/learnsets.json', JSON.stringify(learnsets));
 writeFileSync('public/data/types.json', JSON.stringify(typeChart));
+writeFileSync('public/data/abilities.json', JSON.stringify(abilities));
 console.log('species', Object.keys(pokedex).length, 'moves', Object.keys(moves).length);

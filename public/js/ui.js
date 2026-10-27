@@ -1,9 +1,9 @@
 // Screens, overlays and player flows (everything except the battle screen).
 import { S, defaultProfile, normalizeProfile } from './state.js';
 import { api, configured, saveRun, saveProfile, flushSaves, cancelRunSave } from './api.js';
-import { DEX, MOVES, REGIONS, regionOf, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS } from './data.js';
+import { DEX, MOVES, REGIONS, ABILITIES, regionOf, familyRoot, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS } from './data.js';
 import {
-  createMon, calcStats, maxHp, monName, NATURES, STAT_LABELS, natureMod, expForLevel, gainExp, levelUp,
+  createMon, calcStats, maxHp, monName, NATURES, STAT_LABELS, STAT_SHORT, natureMod, natureLabel, ivJudge, expForLevel, gainExp, levelUp, evoItemFor,
   levelEvolution, itemEvolution, evolve, replaceMove,
 } from './mechanics.js';
 import {
@@ -36,6 +36,11 @@ export function render() {
   afterRender();
 }
 function afterRender() {
+  if (S.refocus) {
+    const el = document.querySelector(S.refocus.selector);
+    if (el) { el.focus(); el.setSelectionRange(S.refocus.pos, S.refocus.pos); }
+    S.refocus = null;
+  }
   if (S.screen === 'map') {
     const cur = document.querySelector('.node.available, .node.current');
     if (cur && !S.ui.scrolled) { cur.scrollIntoView({ block: 'center' }); S.ui.scrolled = true; }
@@ -173,7 +178,10 @@ export async function loadAccount() {
     S.profile = normalizeProfile(me.profile);
     S.run = me.run && Array.isArray(me.run.party) ? me.run : null;
     applyAudioSettings(S.profile.settings);
-    if (isNew) persistProfile();
+    // Catches made before natures/abilities were tracked still count
+    let changed = false;
+    for (const m of [...(S.run?.party || []), ...(S.run?.box || [])]) if (m.ball && recordCatch(m)) changed = true;
+    if (isNew || changed) persistProfile();
     go('menu');
   } catch (e) {
     S.user = null;
@@ -309,6 +317,10 @@ SCREENS.mode = () => {
       </button>`).join('')}</div>
   </section>`;
 };
+registerActions({
+  starterNature: v => { S.modal.nat = v === '' ? undefined : +v; },
+  starterAbility: v => { S.modal.ab = v || undefined; },
+});
 registerActions({ pickMode: key => go('difficulty', { mode: key }) });
 
 // ---------- Difficulty ----------
@@ -330,6 +342,81 @@ registerActions({
   pickDifficulty: key => go('starters', { region: 0, difficulty: key, mode: S.ui.mode || 'classic' }),
 });
 
+// ---------- Filtering & sorting ----------
+const SPECIES_SORTS = [['dex', 'Dex No.'], ['name', 'Name'], ['bst', 'Base stat total'], ['hp', 'Base HP'], ['atk', 'Base Attack'], ['def', 'Base Defense'], ['spa', 'Base Sp. Atk'], ['spd', 'Base Sp. Def'], ['spe', 'Base Speed']];
+const MON_SORTS = [['order', 'Default order'], ['dex', 'Dex No.'], ['name', 'Name'], ['level', 'Level'], ['hpPct', 'HP remaining'], ['bst', 'Base stat total'],
+  ['hp', 'HP'], ['atk', 'Attack'], ['def', 'Defense'], ['spa', 'Sp. Atk'], ['spd', 'Sp. Def'], ['spe', 'Speed'], ['ivs', 'IV total'], ['evs', 'EV total']];
+const STAT_IDX = { hp: 0, atk: 1, def: 2, spa: 3, spd: 4, spe: 5 };
+const TYPE_LIST = Object.keys(TYPE_COLORS);
+
+function filterState(ctx) {
+  S.filters ||= {};
+  return (S.filters[ctx] ||= { q: '', type: '', region: '', sort: ctx === 'starters' ? 'dex' : 'order', dir: 'asc' });
+}
+
+function filterBar(ctx, { species = false, region = true } = {}) {
+  const f = filterState(ctx);
+  const sorts = species ? SPECIES_SORTS : MON_SORTS;
+  return `<div class="filter-bar">
+    <input type="search" placeholder="Search by name" value="${esc(f.q)}" data-input="filterQ" data-ctx="${ctx}" aria-label="Search by name">
+    <select data-input="filterType" data-ctx="${ctx}" aria-label="Filter by type"><option value="">All types</option>${TYPE_LIST.map(t => `<option ${f.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    ${region ? `<select data-input="filterRegion" data-ctx="${ctx}" aria-label="Filter by region"><option value="">All regions</option>${REGIONS.map((r, i) => `<option value="${i}" ${f.region === String(i) ? 'selected' : ''}>${r.name}</option>`).join('')}</select>` : ''}
+    <select data-input="filterSort" data-ctx="${ctx}" aria-label="Sort by">${sorts.map(([k, l]) => `<option value="${k}" ${f.sort === k ? 'selected' : ''}>Sort: ${l}</option>`).join('')}</select>
+    <button class="small-btn" data-act="filterDir" data-arg="${ctx}" title="Reverse order">${f.dir === 'asc' ? '↑ Asc' : '↓ Desc'}</button>
+    ${f.q || f.type || f.region ? `<button class="small-btn ghost" data-act="filterClear" data-arg="${ctx}">Clear</button>` : ''}
+  </div>`;
+}
+
+function matches(f, id, name) {
+  const sp = DEX[id];
+  if (f.q && !name.toLowerCase().includes(f.q.toLowerCase()) && !sp.n.toLowerCase().includes(f.q.toLowerCase())) return false;
+  if (f.type && !sp.t.includes(f.type)) return false;
+  if (f.region !== '' && regionOf(id) !== +f.region) return false;
+  return true;
+}
+
+function sortSpecies(ids, f) {
+  const key = id => f.sort === 'name' ? DEX[id].n : f.sort === 'bst' ? bst(id) : f.sort in STAT_IDX ? DEX[id].b[STAT_IDX[f.sort]] : id;
+  return ids.filter(id => matches(f, id, DEX[id].n)).sort((a, b) => cmp(key(a), key(b), f.dir) || a - b);
+}
+
+/** Returns [mon, originalIndex] pairs so actions still point at the right Pokémon. */
+function sortMons(list, f) {
+  const key = (m, i) => {
+    switch (f.sort) {
+      case 'dex': return m.id;
+      case 'name': return monName(m);
+      case 'level': return m.lv;
+      case 'hpPct': return m.hp / maxHp(m);
+      case 'bst': return bst(m.id);
+      case 'ivs': return m.iv.reduce((a, b) => a + b, 0);
+      case 'evs': return m.ev.reduce((a, b) => a + b, 0);
+      default: return f.sort in STAT_IDX ? calcStats(m)[STAT_IDX[f.sort]] : i;
+    }
+  };
+  return list.map((m, i) => [m, i]).filter(([m]) => matches(f, m.id, monName(m)))
+    .sort(([a, i], [b, j]) => cmp(key(a, i), key(b, j), f.dir) || i - j);
+}
+
+function cmp(a, b, dir) {
+  const r = typeof a === 'string' ? a.localeCompare(b) : a - b;
+  return dir === 'desc' ? -r : r;
+}
+
+function setFilter(ctx, key, value, el) {
+  filterState(ctx)[key] = value;
+  if (key === 'q') S.refocus = { selector: `[data-input="filterQ"][data-ctx="${ctx}"]`, pos: el?.selectionStart ?? value.length };
+  render();
+}
+registerActions({
+  filterQ: (v, el) => setFilter(el.dataset.ctx, 'q', v, el),
+  filterType: (v, el) => setFilter(el.dataset.ctx, 'type', v),
+  filterRegion: (v, el) => setFilter(el.dataset.ctx, 'region', v),
+  filterSort: (v, el) => setFilter(el.dataset.ctx, 'sort', v),
+  filterDir: ctx => { const f = filterState(ctx); f.dir = f.dir === 'asc' ? 'desc' : 'asc'; render(); },
+  filterClear: ctx => { Object.assign(filterState(ctx), { q: '', type: '', region: '' }); render(); },
+});
+
 // ---------- Starter selection ----------
 function starterPool() {
   if (S.user?.isAdmin && S.profile.settings.allStarters) return Object.keys(DEX).map(Number);
@@ -337,19 +424,21 @@ function starterPool() {
 }
 SCREENS.starters = () => {
   playMusic('menu');
-  const region = S.ui.region || 0;
+  const region = S.ui.region ?? 0;
   const pool = starterPool();
-  const ids = pool.filter(id => regionOf(id) === region).sort((a, b) => a - b);
+  const f = filterState('starters');
+  const ids = sortSpecies(region === -1 ? pool : pool.filter(id => regionOf(id) === region), { ...f, region: '' });
   const counts = REGIONS.map((_, i) => pool.filter(id => regionOf(id) === i).length);
   return `<section class="panel">
     <div class="row"><h2>Choose your partner ${modeBadge(S.ui.mode || 'classic')} ${diffBadge(S.ui.difficulty || 'medium')}</h2><button data-act="toDifficulty">Back</button></div>
-    ${(S.ui.mode || 'classic') === 'classic' ? `<p class="notice">Classic mode: your partner's home region decides the journey. A ${REGIONS[region].name} Pokémon means ${REGIONS[region].name}'s Gym Leaders, villain team, Elite Four and Champion.</p>` : ''}
+    ${(S.ui.mode || 'classic') === 'classic' ? `<p class="notice">Classic mode: your partner's home region decides the journey${region >= 0 ? ` — a ${REGIONS[region].name} Pokémon means ${REGIONS[region].name}'s Gym Leaders, villain team, Elite Four and Champion` : ''}.</p>` : ''}
     <p class="muted">Your first run starts with the three Kanto starters. Every Pokémon you catch on a run joins this pool for future runs, sorted by its home region.</p>
-    <div class="tabs wrap">${REGIONS.map((r, i) => `<button class="${i === region ? 'active' : ''}" data-act="starterRegion" data-arg="${i}">${r.name} <small>${counts[i]}</small></button>`).join('')}</div>
+    <div class="tabs wrap"><button class="${region === -1 ? 'active' : ''}" data-act="starterRegion" data-arg="-1">All <small>${pool.length}</small></button>${REGIONS.map((r, i) => `<button class="${i === region ? 'active' : ''}" data-act="starterRegion" data-arg="${i}">${r.name} <small>${counts[i]}</small></button>`).join('')}</div>
+    ${filterBar('starters', { species: true, region: false })}
     <div class="starter-grid">
       ${ids.length ? ids.map(id => `<button class="starter" data-act="pickStarter" data-arg="${id}">
-        ${img(artUrl(id), '', DEX[id].n)}<strong>${DEX[id].n}</strong><div>${DEX[id].t.map(typeBadge).join('')}</div></button>`).join('')
-        : `<p class="muted empty">You haven't caught any ${REGIONS[region].name} Pokémon yet.</p>`}
+        ${img(artUrl(id), '', DEX[id].n)}<strong>${DEX[id].n}</strong><div>${DEX[id].t.map(typeBadge).join('')}</div>${['dex', 'name'].includes(f.sort) ? '' : `<small class="muted">${f.sort === 'bst' ? 'BST ' + bst(id) : SPECIES_SORTS.find(x => x[0] === f.sort)[1].replace('Base ', '') + ' ' + DEX[id].b[STAT_IDX[f.sort]]}</small>`}</button>`).join('')
+        : `<p class="muted empty">${f.q || f.type ? 'No Pokémon match these filters.' : region >= 0 ? `You haven't caught any ${REGIONS[region].name} Pokémon yet.` : 'No Pokémon yet.'}</p>`}
     </div>
   </section>`;
 };
@@ -363,8 +452,9 @@ registerActions({
   confirmStarter: async id => {
     const difficulty = S.modal?.difficulty || 'medium';
     const mode = S.modal?.mode || 'classic';
+    const choice = { nat: S.modal?.nat, ab: S.modal?.ab };
     S.modal = null;
-    S.run = newRun(+id, difficulty, mode);
+    S.run = newRun(+id, difficulty, mode, choice);
     S.profile.stats.runs++;
     persistProfile();
     playCry(+id);
@@ -425,7 +515,7 @@ function sidePanel() {
     <div class="wallet"><span>Money</span><b>$${run.money.toLocaleString()}</b></div>
     <h3>Team <small class="muted">${run.party.length}/6 · Box ${run.box.length}</small></h3>
     <div class="party-list">${run.party.map((m, i) => monCard(m, i)).join('')}</div>
-    <div class="row gap wrap"><button data-act="openBag">Bag</button><button data-act="openTeam">Team</button></div>
+    <div class="row gap wrap"><button data-act="openBag">Bag</button><button data-act="openTeam">Team</button><button data-act="openBox">Box</button></div>
     <h3>Badges <small class="muted">${run.badges.length}</small></h3>
     <div class="badges">${run.badges.length ? run.badges.map(b => `<span class="badge" title="${esc(b.leader)}">${esc(b.name)}</span>`).join('') : '<span class="muted small">Defeat Gym Leaders to earn badges.</span>'}</div>
     <p class="muted small">Battles won: ${run.stats.wins} · Caught: ${run.stats.caught}</p>
@@ -519,7 +609,7 @@ function pcView() {
   const run = S.run;
   return `<div class="pc">
     <div><h3>Team (${run.party.length}/6)</h3><div class="party-list">${run.party.map((m, i) => monCard(m, i, { action: 'depositMon', extra: '<span class="small">→ Box</span>' })).join('')}</div></div>
-    <div><h3>Box (${run.box.length})</h3><div class="party-list">${run.box.length ? run.box.map((m, i) => monCard(m, i, { action: 'withdrawMon', extra: '<span class="small">→ Team</span>' })).join('') : '<p class="muted small">Pokémon caught with a full team go here.</p>'}</div></div>
+    <div><h3>Box (${run.box.length})</h3>${run.box.length ? filterBar('box') : ''}<div class="party-list">${run.box.length ? (sortMons(run.box, filterState('box')).map(([m, i]) => monCard(m, i, { action: 'withdrawMon', extra: `<span class="small">${sortExtra(m, 'box')} → Team</span>` })).join('') || '<p class="muted small">No Pokémon match these filters.</p>') : '<p class="muted small">Pokémon caught with a full team go here.</p>'}</div></div>
   </div>`;
 }
 
@@ -566,6 +656,8 @@ function healPartyMon(m) { m.hp = maxHp(m); m.st = null; m.moves.forEach(x => { 
 registerActions({
   openTeam: () => { S.modal = { type: 'team' }; render(); },
   showSummary: i => { S.modal = { type: 'summary', index: +i }; render(); },
+  showBoxSummary: i => { S.modal = { type: 'summary', index: +i, src: 'box' }; render(); },
+  openBox: () => { S.modal = { type: 'box' }; render(); },
   moveUp: i => {
     i = +i;
     const p = S.run.party;
@@ -592,15 +684,27 @@ function renderModal() {
     body = `<p>${esc(m.text)}</p><div class="row gap"><button data-act="closeModal">Cancel</button><button class="primary danger" data-act="${m.yes}">Confirm</button></div>`;
   } else if (m.type === 'confirmStarter') {
     const sp = DEX[m.id];
+    const un = unlockedFor(m.id);
+    const pickers = (un.natures.length || un.abilities.length) ? `<div class="starter-pickers">
+        ${un.natures.length ? `<label>Nature<select data-input="starterNature"><option value="">Random</option>${un.natures.map(n => `<option value="${n}" ${m.nat === n ? 'selected' : ''}>${esc(natureLabel(n))}</option>`).join('')}</select></label>` : ''}
+        ${un.abilities.length ? `<label>Ability<select data-input="starterAbility"><option value="">Random</option>${un.abilities.map(a => `<option ${m.ab === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>` : ''}
+      </div>` : '';
     body = `<div class="center-text">${img(artUrl(m.id), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
+      <div class="abilities-preview">${[...sp.a.map(a => abilityInfo(a, false)), sp.h ? abilityInfo(sp.h, true) : ''].join('')}</div>
+      ${pickers}
       <p class="muted">Start a ${GAME_MODES[m.mode].name} · ${DIFFICULTIES[m.difficulty].name} run with ${sp.n}?${m.mode === 'classic' ? ` You'll journey through ${REGIONS[regionOf(m.id)].name}.` : ''}</p></div>
       <div class="row gap"><button data-act="closeModal">Not yet</button><button class="primary" data-act="confirmStarter" data-arg="${m.id}">I choose you!</button></div>`;
   } else if (m.type === 'team') {
-    body = `<h2>Team</h2><div class="party-list">${S.run.party.map((x, i) => monCard(x, i)).join('')}</div>
-      <p class="muted small">Select a Pokémon to see its summary, change the lead, or use an item.</p>
-      <div class="row gap"><button data-act="openBag">Bag</button><button class="primary" data-act="closeModal">Close</button></div>`;
+    body = `<h2>Team</h2>${filterBar('team')}<div class="party-list">${sortMons(S.run.party, filterState('team')).map(([x, i]) => monCard(x, i, { extra: `<span class="small">${sortExtra(x, 'team')}</span>` })).join('') || '<p class="muted small">No Pokémon match these filters.</p>'}</div>
+      <p class="muted small">Select a Pokémon to see its summary, change the lead, or use an item. Sorting only changes this view; use "Make lead" to change your battle order.</p>
+      <div class="row gap"><button data-act="openBag">Bag</button><button data-act="openBox">Box (${S.run.box.length})</button><button class="primary" data-act="closeModal">Close</button></div>`;
+  } else if (m.type === 'box') {
+    body = `<h2>Box <small class="muted">${S.run.box.length} Pokémon</small></h2>${filterBar('boxView')}
+      <div class="party-list">${S.run.box.length ? (sortMons(S.run.box, filterState('boxView')).map(([x, i]) => monCard(x, i, { action: 'showBoxSummary', extra: `<span class="small">${sortExtra(x, 'boxView')}</span>` })).join('') || '<p class="muted small">No Pokémon match these filters.</p>') : '<p class="muted small">Pokémon caught with a full team go here.</p>'}</div>
+      <p class="muted small">Move Pokémon between your team and the Box at a Pokémon Center.</p>
+      <div class="row gap"><button data-act="openTeam">Team</button><button class="primary" data-act="closeModal">Close</button></div>`;
   } else if (m.type === 'summary') {
-    body = summaryHtml(S.run.party[m.index], m.index);
+    body = m.picker ? pickerHtml(m) : summaryHtml(summaryMon(m), m.index, m.src || 'party');
   } else if (m.type === 'bag') {
     body = bagHtml(m.pocket);
   } else if (m.type === 'admin') {
@@ -619,33 +723,73 @@ function itemHint(item, mon) {
   return '';
 }
 
-function summaryHtml(mon, index) {
+/** Shows the value being sorted by, e.g. "Spe 87", on each card. */
+function sortExtra(m, ctx) {
+  const f = filterState(ctx);
+  switch (f.sort) {
+    case 'bst': return 'BST ' + bst(m.id);
+    case 'ivs': return 'IVs ' + m.iv.reduce((a, b) => a + b, 0);
+    case 'evs': return 'EVs ' + m.ev.reduce((a, b) => a + b, 0);
+    case 'hpPct': return Math.round((m.hp / maxHp(m)) * 100) + '%';
+    default: return f.sort in STAT_IDX ? STAT_SHORT[STAT_IDX[f.sort]] + ' ' + calcStats(m)[STAT_IDX[f.sort]] : '';
+  }
+}
+
+function summaryMon(m) { return (m.src === 'box' ? S.run.box : S.run.party)[m.index]; }
+
+function abilityInfo(name, hidden) {
+  return `<div class="ability"><strong>${esc(name)}</strong>${hidden ? ' <span class="tag-hidden">Hidden</span>' : ''}<p class="small muted">${esc(ABILITIES[name] || 'No description available.')}</p></div>`;
+}
+
+function summaryHtml(mon, index, src = 'party') {
   const sp = DEX[mon.id];
   const stats = calcStats(mon);
   const next = expForLevel(sp.gr, mon.lv + 1), cur = expForLevel(sp.gr, mon.lv);
   const pct = mon.lv >= 100 ? 100 : ((mon.exp - cur) / (next - cur)) * 100;
+  const evTotal = mon.ev.reduce((a, b) => a + b, 0);
+  const ivTotal = mon.iv.reduce((a, b) => a + b, 0);
+  const natures = unlockedNatures(mon).filter(n => n !== mon.nat);
+  const abilities = unlockedAbilitySlots(mon).filter(a => a !== mon.ab);
   return `<div class="summary">
     <div class="summary-head">
       ${img(artUrl(mon.id), 'summary-art', sp.n)}
       <div><h2>${esc(monName(mon))}${mon.shiny ? ' ✦' : ''} <small>Lv ${mon.lv}</small></h2>
         <div>${sp.t.map(typeBadge).join('')} ${statusTag(mon.st)}</div>
-        <p class="small">#${mon.id} · ${NATURES[mon.nat]} nature · Ability: ${esc(mon.ab)}</p>
-        <p class="small">Friendship: ${mon.fr} · ${mon.lv < 100 ? `${(next - mon.exp).toLocaleString()} Exp. to Lv ${mon.lv + 1}` : 'Max level'}</p>
+        <p class="small">#${mon.id} · Friendship ${mon.fr} · ${mon.lv < 100 ? `${(next - mon.exp).toLocaleString()} Exp. to Lv ${mon.lv + 1}` : 'Max level'}${mon.ball ? ` · Caught in a ${esc(mon.ball)}` : ''}</p>
         <div class="expbar"><i style="width:${pct}%"></i></div>
       </div>
     </div>
     <div class="summary-cols">
-      <table class="stats">${stats.map((v, i) => {
-        const nm = natureMod(mon.nat, i);
-        return `<tr><th class="${nm > 1 ? 'up' : nm < 1 ? 'down' : ''}">${STAT_LABELS[i]}</th><td>${i === 0 ? `${mon.hp}/${v}` : v}</td><td class="bar"><i style="width:${Math.min(100, (sp.b[i] / 180) * 100)}%"></i></td></tr>`;
-      }).join('')}</table>
-      <div class="moves-list">${mon.moves.map(x => moveRow(x.id, x.pp)).join('')}</div>
+      <div>
+        <h4>Nature</h4>
+        <div class="row"><span>${esc(natureLabel(mon.nat))}</span>${natures.length ? `<button class="small-btn" data-act="openNature">Change (${natures.length})</button>` : ''}</div>
+        <h4>Ability</h4>
+        ${abilityInfo(mon.ab, mon.ab === sp.h)}
+        ${abilities.length ? `<button class="small-btn" data-act="openAbility">Change ability (${abilities.length})</button>` : ''}
+        <p class="small muted">${natures.length || abilities.length ? '' : 'Catch more of this evolution family to unlock other natures and abilities.'}</p>
+      </div>
+      <div>
+        <h4>Stats</h4>
+        <table class="stats full">
+          <tr><th></th><th>Base</th><th>IV</th><th>EV</th><th>Stat</th></tr>
+          ${stats.map((v, i) => {
+            const nm = natureMod(mon.nat, i);
+            return `<tr><th class="${nm > 1 ? 'up' : nm < 1 ? 'down' : ''}">${STAT_SHORT[i]}</th><td>${sp.b[i]}</td>
+              <td title="${ivJudge(mon.iv[i])}"><span class="iv iv-${mon.iv[i] === 31 ? 'best' : mon.iv[i] >= 26 ? 'good' : mon.iv[i] >= 16 ? 'ok' : 'low'}">${mon.iv[i]}</span></td>
+              <td>${mon.ev[i]}</td><td><b>${i === 0 ? `${mon.hp}/${v}` : v}</b></td></tr>`;
+          }).join('')}
+          <tr class="totals"><th>Total</th><td>${bst(mon.id)}</td><td>${ivTotal}/186</td><td>${evTotal}/510</td><td></td></tr>
+        </table>
+        <p class="small muted">IVs are 0–31 (hover for the judge's rating). EVs come from battles and vitamins: up to 252 per stat, 510 total.</p>
+      </div>
     </div>
-    ${evoHint(mon)}
+    <h4>Moves</h4>
+    <div class="moves-list two-col">${mon.moves.map(x => moveRow(x.id, x.pp)).join('')}</div>
+    ${evolutionSection(mon)}
     <div class="row gap wrap">
-      ${index > 0 ? `<button data-act="makeLead" data-arg="${index}">Make lead</button><button data-act="moveUp" data-arg="${index}">Move up</button>` : ''}
-      <button data-act="openBag">Use item</button>
-      <button class="primary" data-act="openTeam">Back</button>
+      ${src === 'party' && index > 0 ? `<button data-act="makeLead" data-arg="${index}">Make lead</button><button data-act="moveUp" data-arg="${index}">Move up</button>` : ''}
+      ${src === 'party' ? '<button data-act="openBag">Use item</button>' : ''}
+      <button class="primary" data-act="${src === 'party' ? 'openTeam' : 'closeModal'}">Back</button>
     </div>
   </div>`;
 }
@@ -659,20 +803,107 @@ export function moveRow(id, pp) {
   </div>`;
 }
 
-function evoHint(mon) {
-  const evos = DEX[mon.id].e || [];
-  if (!evos.length) return '';
-  const parts = evos.map(e => {
-    const to = DEX[e.to].n;
-    if (e.level && !e.type) return `${to} at Lv ${e.level}${e.cond ? ` (${e.cond.replace('with the console turned upside-down', '').replace('during rain', '').trim()})` : ''}`;
-    if (e.type === 'levelFriendship') return `${to} with high friendship${e.cond ? ' ' + e.cond : ''}`;
-    if (e.type === 'levelMove') return `${to} when leveling up knowing ${MOVES[e.move]?.n || e.move}`;
-    if (e.type === 'levelExtra' && e.cond?.includes('Fairy')) return `${to} with a Fairy move and high friendship`;
-    if (e.type === 'useItem' || e.type === 'levelHold') return `${to} with a ${e.item}`;
-    if (e.type === 'trade') return `${to} with ${e.item ? 'a ' + e.item : 'a Linking Cord'}`;
-    return `${to} with a Linking Cord`;
-  });
-  return `<p class="small muted">Evolves into: ${parts.map(esc).join(' · ')}</p>`;
+function evolutionSection(mon) {
+  const sp = DEX[mon.id];
+  const run = S.run;
+  const from = sp.p ? `<p class="small muted">Evolves from ${esc(DEX[sp.p].n)}.</p>` : '';
+  const evos = sp.e || [];
+  if (!evos.length) return `<h4>Evolution</h4>${from}<p class="small muted">${esc(sp.n)} does not evolve.</p>`;
+  const day = (() => { const h = new Date().getHours(); return h >= 6 && h < 18; })();
+  const rows = evos.map(e => {
+    const to = DEX[e.to];
+    const item = evoItemFor(e);
+    const have = item ? (run?.bag[item] || 0) : 0;
+    let cond, ready = false;
+    const time = e.cond?.includes('during the day') ? ` during the day (now: ${day ? 'day ✓' : 'night'})` : e.cond?.includes('at night') ? ` at night (now: ${day ? 'day' : 'night ✓'})` : '';
+    if (item) {
+      cond = `Use ${item === 'Linking Cord' ? 'a Linking Cord' : `a ${item}`}${e.type === 'trade' && !e.item ? ' (stands in for trading)' : e.type === 'other' || (e.type === 'levelExtra' && !e.cond?.includes('Fairy')) ? ` (stands in for: ${e.cond || 'a special condition'})` : ''}. You have ${have}.`;
+      ready = have > 0;
+    } else if (e.type === 'levelFriendship') {
+      cond = `Level up with friendship 160+${time}. Friendship now: ${mon.fr}.`;
+      ready = mon.fr >= 160;
+    } else if (e.type === 'levelMove') {
+      const knows = mon.moves.some(m => m.id === e.move);
+      cond = `Level up knowing ${MOVES[e.move]?.n || e.move} (${knows ? 'knows it ✓' : 'not known yet'}).`;
+      ready = knows;
+    } else if (e.type === 'levelExtra') {
+      cond = `Level up with friendship 160+ while knowing a Fairy-type move. Friendship now: ${mon.fr}.`;
+    } else {
+      const extra = (e.cond || '').replace(/with the console turned upside-down|during rain/, '').trim();
+      cond = `Reach Lv ${e.level}${time}${extra && !time ? ` (${extra})` : ''}. Now Lv ${mon.lv}.`;
+      ready = mon.lv >= e.level;
+    }
+    return `<div class="evo-row ${ready ? 'ready' : ''}">${img(spriteUrl(e.to), 'mini-sprite', to.n)}<div><strong>${esc(to.n)}</strong> ${to.t.map(typeBadge).join('')}<p class="small">${esc(cond)}</p></div></div>`;
+  }).join('');
+  return `<h4>Evolution</h4>${from}<div class="evo-list">${rows}</div>`;
+}
+
+// ---------- Natures & abilities unlocked by catching (per evolution family) ----------
+function dexEntry(id) { return S.profile.dex?.[familyRoot(id)]; }
+function abilitySlot(id, ab) {
+  const sp = DEX[id];
+  const i = sp.a.indexOf(ab);
+  return i >= 0 ? String(i) : ab === sp.h ? 'H' : null;
+}
+export function recordCatch(mon) {
+  S.profile.dex ||= {};
+  const k = familyRoot(mon.id);
+  const e = (S.profile.dex[k] ||= { n: [], a: [] });
+  let changed = false;
+  if (!e.n.includes(mon.nat)) { e.n.push(mon.nat); changed = true; }
+  const slot = abilitySlot(mon.id, mon.ab);
+  if (slot && !e.a.includes(slot)) { e.a.push(slot); changed = true; }
+  return changed;
+}
+function unlockedNatures(mon) { return [...(dexEntry(mon.id)?.n || [])].sort((a, b) => a - b); }
+/** Abilities unlocked for this Pokémon's current species (slots map across evolutions). */
+function unlockedAbilitySlots(mon) {
+  const sp = DEX[mon.id];
+  const names = (dexEntry(mon.id)?.a || []).map(slot => slot === 'H' ? sp.h : sp.a[+slot] || sp.a[0]).filter(Boolean);
+  return [...new Set(names)];
+}
+function unlockedFor(id) {
+  const e = S.profile.dex?.[familyRoot(id)] || { n: [], a: [] };
+  const sp = DEX[id];
+  return { natures: [...e.n].sort((a, b) => a - b), abilities: [...new Set(e.a.map(slot => slot === 'H' ? sp.h : sp.a[+slot] || sp.a[0]).filter(Boolean))] };
+}
+
+registerActions({
+  openNature: () => { S.modal = { ...S.modal, picker: 'nature' }; render(); },
+  openAbility: () => { S.modal = { ...S.modal, picker: 'ability' }; render(); },
+  closePicker: () => { S.modal = { ...S.modal, picker: null }; render(); },
+  setNature: n => {
+    const mon = summaryMon(S.modal);
+    if (!unlockedNatures(mon).includes(+n)) return;
+    const before = maxHp(mon);
+    mon.nat = +n;
+    mon.hp = Math.max(mon.hp > 0 ? 1 : 0, mon.hp + maxHp(mon) - before);
+    S.modal = { ...S.modal, picker: null };
+    toast(`${monName(mon)} is now ${NATURES[+n]}.`);
+    persistRun(); render();
+  },
+  setAbility: name => {
+    const mon = summaryMon(S.modal);
+    if (!unlockedAbilitySlots(mon).includes(name)) return;
+    mon.ab = name;
+    S.modal = { ...S.modal, picker: null };
+    toast(`${monName(mon)}'s ability is now ${name}.`);
+    persistRun(); render();
+  },
+});
+
+function pickerHtml(m) {
+  const mon = summaryMon(m);
+  if (m.picker === 'nature') {
+    return `<h2>Change ${esc(monName(mon))}'s nature</h2>
+      <p class="muted small">Natures you've caught in the ${esc(DEX[familyRoot(mon.id)].n)} family.</p>
+      <div class="picker-grid">${unlockedNatures(mon).map(n => `<button class="${n === mon.nat ? 'active' : ''}" data-act="setNature" data-arg="${n}" ${n === mon.nat ? 'disabled' : ''}>${esc(natureLabel(n))}</button>`).join('')}</div>
+      <div class="row gap"><button data-act="closePicker">Back</button></div>`;
+  }
+  return `<h2>Change ${esc(monName(mon))}'s ability</h2>
+    <p class="muted small">Abilities you've caught in the ${esc(DEX[familyRoot(mon.id)].n)} family.</p>
+    <div class="picker-list">${unlockedAbilitySlots(mon).map(a => `<button class="${a === mon.ab ? 'active' : ''}" data-act="setAbility" data-arg="${esc(a)}" ${a === mon.ab ? 'disabled' : ''}>${abilityInfo(a, a === DEX[mon.id].h)}</button>`).join('')}</div>
+    <div class="row gap"><button data-act="closePicker">Back</button></div>`;
 }
 
 function bagHtml(pocket) {
@@ -718,7 +949,7 @@ function useFieldItem(item, index) {
     return;
   }
   const res = applyItem(mon, item);
-  if (!res.ok) { toast("It won't have any effect."); sfx('error'); return; }
+  if (!res.ok) { toast(res.msg || "It won't have any effect."); sfx('error'); return; }
   run.bag[item]--;
   sfx('heal');
   toast(res.msg);
@@ -946,6 +1177,11 @@ export function finishBattle() {
   if (result === 'caught') {
     const mon = b.caughtMon;
     const where = storeCaught(run, mon);
+    const n0 = unlockedFor(mon.id);
+    if (recordCatch(mon)) {
+      const newNat = !n0.natures.includes(mon.nat), newAb = !n0.abilities.includes(mon.ab);
+      if (newNat || newAb) steps.push({ type: 'msg', text: `Unlocked for the ${DEX[familyRoot(mon.id)].n} family: ${[newNat && NATURES[mon.nat] + ' nature', newAb && mon.ab + ' ability'].filter(Boolean).join(' and ')}.` });
+    }
     if (where === 'box') steps.push({ type: 'msg', text: `${monName(mon)} was sent to the Box.` });
     if (!S.profile.caught.includes(mon.id)) {
       S.profile.caught.push(mon.id);

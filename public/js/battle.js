@@ -7,6 +7,7 @@ import {
 } from './mechanics.js';
 import { ITEMS, diffOf } from './content.js';
 
+const STAT_KEYS_LONG = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed'];
 const STRUGGLE = { n: 'Struggle', t: '???', c: 'P', p: 50, a: 0, pp: 1, recoilMax: 0.25 };
 const STAGE_NAMES = { atk: 'Attack', def: 'Defense', spa: 'Sp. Atk', spd: 'Sp. Def', spe: 'Speed', accuracy: 'accuracy', evasion: 'evasiveness' };
 const STATUS_NAMES = { brn: 'burned', par: 'paralyzed', psn: 'poisoned', tox: 'badly poisoned', slp: 'asleep', frz: 'frozen' };
@@ -215,6 +216,25 @@ export function applyItem(mon, item, moveIndex) {
     if (!mon.st || (it.cures !== 'all' && !it.cures.includes(mon.st))) return { ok: false };
     mon.st = null; mon.sl = 0;
     return { ok: true, msg: `${name} was cured!` };
+  }
+  if (it.kind === 'vitamin') {
+    const total = mon.ev.reduce((x, y) => x + y, 0);
+    const add = Math.min(10, 252 - mon.ev[it.stat], 510 - total);
+    if (add <= 0) return { ok: false, msg: `${name}'s ${STAT_KEYS_LONG[it.stat]} EVs can't go any higher.` };
+    const before = maxHp(mon);
+    mon.ev[it.stat] += add;
+    if (it.stat === 0) mon.hp += maxHp(mon) - before;
+    return { ok: true, msg: `${name}'s ${STAT_KEYS_LONG[it.stat]} EVs rose by ${add} (now ${mon.ev[it.stat]}).` };
+  }
+  if (it.kind === 'cap') {
+    if (mon.lv < 50) return { ok: false, msg: 'Hyper Training needs a Pokémon at Lv 50 or higher.' };
+    if (mon.iv.every(v => v === 31)) return { ok: false, msg: `${name}'s IVs are already perfect.` };
+    const before = maxHp(mon);
+    let which;
+    if (it.all) { mon.iv = mon.iv.map(() => 31); which = 'all of its stats'; }
+    else { const i = mon.iv.indexOf(Math.min(...mon.iv)); mon.iv[i] = 31; which = STAT_KEYS_LONG[i]; }
+    mon.hp = Math.max(1, mon.hp + maxHp(mon) - before);
+    return { ok: true, msg: `${name} was Hyper Trained: ${which} now ${it.all ? 'have' : 'has'} the best IVs!` };
   }
   if (it.kind === 'pp') {
     const targets = it.all ? mon.moves : [mon.moves[moveIndex ?? 0]];

@@ -15,6 +15,7 @@ export function defaultProfile() {
     settings: { master: 0.8, music: 0.5, sfx: 0.8, muted: false, textSpeed: 'normal' },
     caught: [],
     hallOfFame: [],
+    dex: {},       // per evolution family: natures (n) and ability slots (a) caught
     stats: { runs: 0, champions: 0, caught: 0 },
   };
 }
@@ -27,6 +28,7 @@ export function normalizeProfile(p) {
     settings: { ...d.settings, ...(p.settings || {}) },
     caught: Array.isArray(p.caught) ? p.caught : [],
     hallOfFame: Array.isArray(p.hallOfFame) ? p.hallOfFame : [],
+    dex: p.dex && typeof p.dex === 'object' ? p.dex : {},
     stats: { ...d.stats, ...(p.stats || {}) },
   };
 }
