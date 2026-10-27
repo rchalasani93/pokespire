@@ -116,6 +116,10 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
 /* Difficulty & money */
 .difficulty-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
 .difficulty { text-align: left; border-top: 5px solid var(--dc); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.difficulty.locked { opacity: .55; filter: grayscale(.6); cursor: not-allowed; }
+.lock-note { margin: 0; font-size: .82rem; color: #ff9b8a; }
+.lock-note.admin { color: #ffd700; }
+.cleared-tag { font-size: .65rem; background: var(--good); color: #0b1a10; padding: 1px 6px; border-radius: 8px; vertical-align: middle; }
 .difficulty-grid.two { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
 .difficulty strong { font-size: 1.25rem; color: var(--dc); }
 .difficulty ul { margin: 0; padding-left: 18px; font-size: .85rem; color: var(--muted); display: grid; gap: 4px; }

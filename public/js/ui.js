@@ -416,22 +416,48 @@ registerActions({
 registerActions({ pickMode: key => go('difficulty', { mode: key }) });
 
 // ---------- Difficulty ----------
+// Difficulties unlock in order: clearing a difficulty (entering the Hall of Fame without admin tools)
+// unlocks the next one. Admins can play any difficulty.
+const DIFF_ORDER = ['easy', 'medium', 'hard', 'hell'];
+export function clearedDifficulties() {
+  const p = S.profile;
+  const set = new Set(p.cleared || []);
+  // Hall of Fame entries from before unlocks existed still count (older ones had no difficulty: Medium)
+  for (const h of p.hallOfFame || []) if (!h.god) set.add(h.difficulty || 'medium');
+  return set;
+}
+export function difficultyUnlocked(key) {
+  const i = DIFF_ORDER.indexOf(key);
+  if (i <= 0) return true;
+  if (S.user?.isAdmin) return true;
+  return clearedDifficulties().has(DIFF_ORDER[i - 1]);
+}
+
 SCREENS.difficulty = () => {
   playMusic('menu');
   const mode = S.ui.mode || 'classic';
+  const cleared = clearedDifficulties();
   return `<section class="panel">
     <div class="row"><h2>Choose a difficulty ${modeBadge(mode)}</h2><button data-act="toMode">Back</button></div>
-    <p class="muted">Every run starts with $100. Battles pay out based on the opponent's level, and Trainers pay more than wild Pokémon.</p>
-    <div class="difficulty-grid">${Object.entries(DIFFICULTIES).map(([key, d]) => `
-      <button class="difficulty" style="--dc:${d.color}" data-act="pickDifficulty" data-arg="${key}">
-        <strong>${d.name}</strong>
+    <p class="muted">Every run starts with $100. Finish a run on a difficulty (enter the Hall of Fame) to unlock the next one.</p>
+    <div class="difficulty-grid">${Object.entries(DIFFICULTIES).map(([key, d], i) => {
+      const open = difficultyUnlocked(key);
+      const adminOpen = open && S.user?.isAdmin && i > 0 && !cleared.has(DIFF_ORDER[i - 1]);
+      return `<button class="difficulty ${open ? '' : 'locked'}" style="--dc:${d.color}" data-act="pickDifficulty" data-arg="${key}" ${open ? '' : 'disabled'}>
+        <strong>${open ? '' : '🔒 '}${d.name}${cleared.has(key) ? ' <span class="cleared-tag">Cleared ✓</span>' : ''}</strong>
+        ${open ? '' : `<p class="lock-note">Clear ${DIFFICULTIES[DIFF_ORDER[i - 1]].name} to unlock</p>`}
+        ${adminOpen ? '<p class="lock-note admin">Unlocked for admin</p>' : ''}
         <ul>${d.rules.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
-      </button>`).join('')}</div>
+      </button>`;
+    }).join('')}</div>
   </section>`;
 };
 registerActions({
   toMode: () => go('mode'),
-  pickDifficulty: key => go('starters', { region: 0, difficulty: key, mode: S.ui.mode || 'classic' }),
+  pickDifficulty: key => {
+    if (!difficultyUnlocked(key)) { sfx('error'); return; }
+    go('starters', { region: 0, difficulty: key, mode: S.ui.mode || 'classic' });
+  },
 });
 
 // ---------- Filtering & sorting ----------
@@ -1470,6 +1496,7 @@ SCREENS.hallOfFame = () => {
     <p class="eyebrow">Congratulations!</p>
     <h1>Hall of Fame</h1>
     <p>You defeated the Elite Four and Champion ${esc(run.league.champion.split('|')[0])}! Your team is now recorded in the Hall of Fame.</p>
+    ${(() => { const next = DIFF_ORDER[DIFF_ORDER.indexOf(run.difficulty || 'medium') + 1]; return next && !run.godUsed && !clearedDifficulties().has(run.difficulty || 'medium') ? `<p class="notice">Finishing this run unlocks ${DIFFICULTIES[next].name} difficulty!</p>` : run.godUsed ? '<p class="muted small">Admin tools were used, so this run doesn\'t unlock the next difficulty.</p>' : ''; })()}
     <div class="hof-team">${run.party.map(m => `<figure>${img(artUrl(m.id), '', monName(m))}<figcaption>${esc(monName(m))}<br><small>Lv ${m.lv}</small></figcaption></figure>`).join('')}</div>
     <button class="primary big" data-act="enterHall">Finish run</button>
   </section>`;
@@ -1478,7 +1505,14 @@ registerActions({
   enterHall: async () => {
     const run = S.run;
     addRunPoints(POINTS.hallOfFame);
-    S.profile.hallOfFame.push({ date: new Date().toISOString(), champion: run.league.champion.split('|')[0], team: partySummary(run.party), starter: run.starter, score: run.score || 0, difficulty: run.difficulty, mode: modeOf(run) });
+    S.profile.hallOfFame.push({ date: new Date().toISOString(), champion: run.league.champion.split('|')[0], team: partySummary(run.party), starter: run.starter, score: run.score || 0, difficulty: run.difficulty, mode: modeOf(run), god: !!run.godUsed });
+    const diffKey = run.difficulty || 'medium';
+    if (!run.godUsed) {
+      const before = clearedDifficulties();
+      S.profile.cleared = [...new Set([...(S.profile.cleared || []), diffKey])];
+      const next = DIFF_ORDER[DIFF_ORDER.indexOf(diffKey) + 1];
+      if (next && !before.has(diffKey)) toast(`${DIFFICULTIES[next].name} difficulty unlocked!`);
+    }
     S.profile.stats.champions++;
     if (!run.god) {
       if (modeOf(run) === 'classic') { S.profile.classicWins ||= []; if (!S.profile.classicWins.includes(runRegion(run))) S.profile.classicWins.push(runRegion(run)); }
