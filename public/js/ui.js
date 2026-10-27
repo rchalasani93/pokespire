@@ -1,0 +1,939 @@
+// Screens, overlays and player flows (everything except the battle screen).
+import { S, defaultProfile, normalizeProfile } from './state.js';
+import { api, saveRun, saveProfile, flushSaves, cancelRunSave } from './api.js';
+import { DEX, MOVES, REGIONS, regionOf, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS } from './data.js';
+import {
+  calcStats, maxHp, monName, NATURES, STAT_LABELS, natureMod, expForLevel, gainExp, levelUp,
+  levelEvolution, itemEvolution, evolve, replaceMove,
+} from './mechanics.js';
+import {
+  ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
+  spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem,
+} from './game.js';
+import { ITEMS, BAG_POCKETS, trainerSpriteUrl } from './content.js';
+import { startBattle, applyItem } from './battle.js';
+import { renderBattle, beginBattle, onBattleAction, resumeBattleUI } from './battle-ui.js';
+import { playMusic, sfx, playCry, applyAudioSettings, unlockAudio } from './audio.js';
+
+export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const app = () => document.getElementById('app');
+
+// ---------- Rendering ----------
+const SCREENS = {};
+export function go(screen, ui = {}) {
+  S.screen = screen;
+  S.ui = ui;
+  render();
+  window.scrollTo(0, 0);
+}
+export function render() {
+  const fn = SCREENS[S.screen];
+  const html = fn ? fn() : '';
+  app().innerHTML = html + (S.modal ? renderModal() : '') + (S.run?.flow?.length && S.screen !== 'battle-playing' ? renderFlow() : '');
+  document.getElementById('topbar-user').innerHTML = S.user
+    ? `<span>${esc(S.user.username)}</span>${S.run && S.screen !== 'menu' ? ` · <span class="money">₽${S.run.money.toLocaleString()}</span>` : ''}`
+    : '';
+  afterRender();
+}
+function afterRender() {
+  if (S.screen === 'map') {
+    const cur = document.querySelector('.node.available, .node.current');
+    if (cur && !S.ui.scrolled) { cur.scrollIntoView({ block: 'center' }); S.ui.scrolled = true; }
+  }
+}
+
+export function persistRun() { if (S.run) saveRun(S.run); }
+export function persistProfile() { saveProfile(S.profile); }
+
+// ---------- Actions (event delegation) ----------
+const ACTIONS = {};
+export function registerActions(map) { Object.assign(ACTIONS, map); }
+
+document.addEventListener('click', e => {
+  unlockAudio();
+  const el = e.target.closest('[data-act]');
+  if (!el || el.disabled) return;
+  const fn = ACTIONS[el.dataset.act];
+  if (!fn) return;
+  e.preventDefault();
+  if (!el.classList.contains('silent')) sfx(el.dataset.act === 'back' || el.dataset.act === 'closeModal' ? 'back' : 'select');
+  fn(el.dataset.arg, el);
+});
+document.addEventListener('submit', e => {
+  const form = e.target.closest('form[data-form]');
+  if (!form) return;
+  e.preventDefault();
+  unlockAudio();
+  ACTIONS[form.dataset.form]?.(new FormData(form), form);
+});
+document.addEventListener('input', e => {
+  const el = e.target.closest('[data-input]');
+  if (el) ACTIONS[el.dataset.input]?.(el.value, el);
+});
+
+// ---------- Shared bits ----------
+export function typeBadge(t) {
+  return `<span class="type" style="background:${TYPE_COLORS[t] || '#777'}">${t}</span>`;
+}
+export function hpBar(hp, max) {
+  const pct = Math.max(0, Math.min(100, (hp / max) * 100));
+  const cls = pct > 50 ? 'good' : pct > 20 ? 'warn' : 'bad';
+  return `<div class="hpbar"><i class="${cls}" style="width:${pct}%"></i></div>`;
+}
+const STATUS_LABEL = { brn: 'BRN', par: 'PAR', psn: 'PSN', tox: 'TOX', slp: 'SLP', frz: 'FRZ' };
+export const statusTag = st => (st ? `<span class="status ${st}">${STATUS_LABEL[st]}</span>` : '');
+const img = (src, cls = '', alt = '') => `<img class="${cls}" src="${src}" alt="${esc(alt)}" loading="lazy" onerror="this.style.visibility='hidden'">`;
+const itemImg = name => img(itemIconUrl(ITEMS[name]?.slug || 'poke-ball'), 'item-icon', name);
+
+function monCard(m, i, { action = 'showSummary', extra = '' } = {}) {
+  const max = maxHp(m);
+  return `<button class="mon-card ${m.hp <= 0 ? 'fainted' : ''}" data-act="${action}" data-arg="${i}">
+    ${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', monName(m))}
+    <div class="mon-card-body">
+      <div class="row"><strong>${esc(monName(m))}${m.shiny ? ' ✦' : ''}</strong><span>Lv ${m.lv}</span></div>
+      ${hpBar(m.hp, max)}
+      <div class="row small"><span>${m.hp}/${max} HP ${statusTag(m.st)}</span>${extra}</div>
+    </div>
+  </button>`;
+}
+
+export function toast(text) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = text;
+  document.body.appendChild(t);
+  setTimeout(() => t.classList.add('show'), 10);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2600);
+}
+
+// ---------- Auth ----------
+SCREENS.auth = () => {
+  const mode = S.ui.mode || 'login';
+  return `<section class="auth">
+    <div class="hero">
+      <img class="hero-art" src="${artUrl(25)}" alt="Pikachu">
+      <h1>PokéSpire</h1>
+      <p>Climb three acts of branching routes, build your team, defeat Gym Leaders and villain teams, and enter the Hall of Fame.</p>
+    </div>
+    <div class="panel auth-panel">
+      <div class="tabs">
+        <button class="${mode === 'login' ? 'active' : ''}" data-act="authMode" data-arg="login">Log in</button>
+        <button class="${mode === 'signup' ? 'active' : ''}" data-act="authMode" data-arg="signup">Sign up</button>
+      </div>
+      <p class="muted">${mode === 'login' ? 'Log in to continue your journey. Your runs, catches and settings are saved to your account.' : 'Create an account to track your runs and save your progress.'}</p>
+      <form data-form="${mode}">
+        <label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" value="${esc(S.ui.username || '')}"></label>
+        <label>Password<input name="password" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" required minlength="${mode === 'signup' ? 8 : 1}"></label>
+        ${mode === 'signup' ? '<label>Confirm password<input name="confirm" type="password" autocomplete="new-password" required minlength="8"></label>' : ''}
+        ${S.ui.error ? `<p class="error" role="alert">${esc(S.ui.error)}</p>` : ''}
+        <button class="primary big" type="submit" ${S.ui.busy ? 'disabled' : ''}>${S.ui.busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}</button>
+      </form>
+    </div>
+  </section>`;
+};
+
+registerActions({
+  authMode: mode => go('auth', { mode }),
+  login: fd => doAuth('login', fd),
+  signup: fd => doAuth('signup', fd),
+});
+
+async function doAuth(mode, fd) {
+  const username = (fd.get('username') || '').trim();
+  const password = fd.get('password') || '';
+  if (mode === 'signup' && password !== fd.get('confirm')) { go('auth', { mode, username, error: 'Passwords do not match.' }); return; }
+  go('auth', { mode, username, busy: true });
+  try {
+    await api[mode](username, password);
+    await loadAccount();
+  } catch (e) {
+    go('auth', { mode, username, error: e.message });
+  }
+}
+
+export async function loadAccount() {
+  try {
+    const me = await api.me();
+    S.user = me.user;
+    const isNew = !me.profile;
+    S.profile = normalizeProfile(me.profile);
+    S.run = me.run && Array.isArray(me.run.party) ? me.run : null;
+    applyAudioSettings(S.profile.settings);
+    if (isNew) persistProfile();
+    go('menu');
+  } catch (e) {
+    S.user = null;
+    go('auth', { mode: 'login' });
+  }
+}
+
+// ---------- Main menu ----------
+SCREENS.menu = () => {
+  playMusic('menu');
+  const r = S.run;
+  return `<section class="menu">
+    <div class="hero small">${img(artUrl(r ? r.party[0].id : 6), 'hero-art', '')}
+      <h1>PokéSpire</h1><p class="muted">Welcome back, ${esc(S.user.username)}.</p></div>
+    <div class="menu-buttons">
+      ${r ? `<button class="primary big" data-act="continueRun">Continue run<small>${ACTS[r.act - 1].name} · ${r.badges.length} badge${r.badges.length === 1 ? '' : 's'}</small></button>` : ''}
+      <button class="${r ? '' : 'primary'} big" data-act="play">${r ? 'New run' : 'Play'}<small>Choose a starter and begin</small></button>
+      <button class="big" data-act="openSettings">Settings<small>Sound and text speed</small></button>
+      <button class="big" data-act="openHistory">History<small>Previous runs and Hall of Fame</small></button>
+      <button class="ghost" data-act="logout">Log out</button>
+    </div>
+    <div class="stat-row">
+      <div><b>${S.profile.stats.runs}</b><span>Runs</span></div>
+      <div><b>${S.profile.stats.champions}</b><span>Hall of Fame</span></div>
+      <div><b>${S.profile.caught.length}</b><span>Species caught</span></div>
+    </div>
+  </section>`;
+};
+
+registerActions({
+  play: () => {
+    if (S.run) { S.modal = { type: 'confirm', text: 'Starting a new run will abandon your current one. It will be recorded in your history.', yes: 'abandonAndPlay' }; render(); return; }
+    go('starters', { region: 0 });
+  },
+  abandonAndPlay: async () => { S.modal = null; await endRun('Abandoned'); go('starters', { region: 0 }); },
+  continueRun: () => resumeRun(),
+  openSettings: () => go('settings'),
+  openHistory: async () => {
+    go('history', { tab: 'runs', loading: true });
+    try { S.history = (await api.history()).history; } catch { S.history = []; }
+    if (S.screen === 'history') go('history', { tab: S.ui.tab || 'runs' });
+  },
+  logout: async () => {
+    await flushSaves();
+    await api.logout().catch(() => {});
+    S.user = null; S.run = null; S.profile = null;
+    go('auth', { mode: 'login' });
+  },
+  back: () => go('menu'),
+  closeModal: () => { S.modal = null; render(); },
+});
+
+// ---------- Settings ----------
+SCREENS.settings = () => {
+  const s = S.profile.settings;
+  const slider = (key, label) => `<label class="slider">${label}<span id="v-${key}">${Math.round(s[key] * 100)}%</span>
+    <input type="range" min="0" max="100" value="${Math.round(s[key] * 100)}" data-input="setVolume" data-arg="${key}" data-key="${key}" aria-label="${label}"></label>`;
+  return `<section class="panel narrow">
+    <h2>Settings</h2>
+    ${slider('master', 'Master volume')}
+    ${slider('music', 'Music')}
+    ${slider('sfx', 'Sound effects & cries')}
+    <label class="check"><input type="checkbox" ${s.muted ? 'checked' : ''} data-act="toggleMute" class="silent"> Mute all sound</label>
+    <label>Text speed
+      <select data-input="setTextSpeed">${['slow', 'normal', 'fast'].map(v => `<option ${s.textSpeed === v ? 'selected' : ''} value="${v}">${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select>
+    </label>
+    <div class="row gap"><button data-act="testSound">Test sound</button><button class="primary" data-act="back">Done</button></div>
+  </section>`;
+};
+registerActions({
+  setVolume: (value, el) => {
+    const key = el.dataset.key;
+    S.profile.settings[key] = Number(value) / 100;
+    document.getElementById('v-' + key).textContent = value + '%';
+    applyAudioSettings(S.profile.settings);
+    persistProfile();
+  },
+  toggleMute: (_, el) => {
+    S.profile.settings.muted = el.checked;
+    applyAudioSettings(S.profile.settings);
+    persistProfile();
+  },
+  setTextSpeed: v => { S.profile.settings.textSpeed = v; persistProfile(); },
+  testSound: () => { sfx('levelup'); setTimeout(() => playCry(25), 500); },
+});
+
+// ---------- History & Hall of Fame ----------
+SCREENS.history = () => {
+  const tab = S.ui.tab || 'runs';
+  const list = S.history || [];
+  const teamStrip = team => `<div class="team-strip">${(team || []).map(m => `<span title="${esc(m.name)} Lv ${m.lv}">${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', m.name)}<small>Lv ${m.lv}</small></span>`).join('')}</div>`;
+  const runs = S.ui.loading ? '<p class="muted">Loading…</p>' : list.length ? list.map(h => `
+    <article class="history-item ${h.result === 'Champion' ? 'win' : h.result === 'Defeated' ? 'loss' : ''}">
+      <div class="row"><strong>${esc(h.result)}</strong><span class="muted">${new Date(h.createdAt).toLocaleString()}</span></div>
+      <p class="muted small">Starter: ${esc(DEX[h.starter]?.n || '?')} · Reached ${esc(h.reached || '')} · ${h.badges ?? 0} badges · ${h.caught ?? 0} caught · ${h.wins ?? 0} battles won${h.durationMin != null ? ` · ${h.durationMin} min` : ''}${h.defeatedBy ? ` · Lost to ${esc(h.defeatedBy)}` : ''}</p>
+      ${teamStrip(h.team)}
+    </article>`).join('') : '<p class="muted">No finished runs yet. Your completed, lost and abandoned runs will appear here.</p>';
+  const hof = S.profile.hallOfFame.length ? S.profile.hallOfFame.slice().reverse().map((h, i) => `
+    <article class="history-item win">
+      <div class="row"><strong>Hall of Fame #${S.profile.hallOfFame.length - i}</strong><span class="muted">${new Date(h.date).toLocaleDateString()}</span></div>
+      <p class="muted small">Defeated Champion ${esc(h.champion)}</p>
+      <div class="hof-team">${h.team.map(m => `<figure>${img(artUrl(m.id), '', m.name)}<figcaption>${esc(m.name)}<br><small>Lv ${m.lv}</small></figcaption></figure>`).join('')}</div>
+    </article>`).join('') : '<p class="muted">Defeat the Elite Four and the Champion to enter the Hall of Fame.</p>';
+  return `<section class="panel">
+    <div class="row"><h2>History</h2><button data-act="back">Back</button></div>
+    <div class="tabs">
+      <button class="${tab === 'runs' ? 'active' : ''}" data-act="historyTab" data-arg="runs">Previous runs</button>
+      <button class="${tab === 'hof' ? 'active' : ''}" data-act="historyTab" data-arg="hof">Hall of Fame</button>
+    </div>
+    ${tab === 'runs' ? runs : hof}
+  </section>`;
+};
+registerActions({ historyTab: tab => go('history', { tab }) });
+
+// ---------- Starter selection ----------
+function starterPool() {
+  return [...new Set([...REGIONS[0].starters, ...S.profile.caught])].filter(id => DEX[id]);
+}
+SCREENS.starters = () => {
+  playMusic('menu');
+  const region = S.ui.region || 0;
+  const pool = starterPool();
+  const ids = pool.filter(id => regionOf(id) === region).sort((a, b) => a - b);
+  const counts = REGIONS.map((_, i) => pool.filter(id => regionOf(id) === i).length);
+  return `<section class="panel">
+    <div class="row"><h2>Choose your partner</h2><button data-act="back">Back</button></div>
+    <p class="muted">Your first run starts with the three Kanto starters. Every Pokémon you catch on a run joins this pool for future runs, sorted by its home region.</p>
+    <div class="tabs wrap">${REGIONS.map((r, i) => `<button class="${i === region ? 'active' : ''}" data-act="starterRegion" data-arg="${i}">${r.name} <small>${counts[i]}</small></button>`).join('')}</div>
+    <div class="starter-grid">
+      ${ids.length ? ids.map(id => `<button class="starter" data-act="pickStarter" data-arg="${id}">
+        ${img(artUrl(id), '', DEX[id].n)}<strong>${DEX[id].n}</strong><div>${DEX[id].t.map(typeBadge).join('')}</div></button>`).join('')
+        : `<p class="muted empty">You haven't caught any ${REGIONS[region].name} Pokémon yet.</p>`}
+    </div>
+  </section>`;
+};
+registerActions({
+  starterRegion: r => go('starters', { region: +r }),
+  pickStarter: id => {
+    S.modal = { type: 'confirmStarter', id: +id };
+    render();
+  },
+  confirmStarter: async id => {
+    S.modal = null;
+    S.run = newRun(+id);
+    S.profile.stats.runs++;
+    persistProfile();
+    playCry(+id);
+    persistRun();
+    go('map');
+  },
+});
+
+// ---------- Map ----------
+function nodePos(n) {
+  // Deterministic jitter so the map looks hand-drawn
+  const h = [...n.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 997, 7);
+  const x = n.id === 'boss' ? 50 : ((n.c + 0.5) / 7) * 100 + ((h % 7) - 3);
+  const y = (ROWS - 1 - n.r) * 76 + 50 + ((h % 5) - 2) * 3;
+  return { x, y };
+}
+
+SCREENS.map = () => {
+  const run = S.run;
+  playMusic('map');
+  const { nodes } = run.map;
+  const avail = new Set(availableNodes(run));
+  const height = ROWS * 76 + 40;
+  let lines = '';
+  for (const n of Object.values(nodes)) {
+    const a = nodePos(n);
+    for (const id of n.next) {
+      const b = nodePos(nodes[id]);
+      const walked = run.visited.includes(n.id) && (run.visited.includes(id) || run.pos === n.id);
+      lines += `<line x1="${a.x}%" y1="${a.y}" x2="${b.x}%" y2="${b.y}" class="${walked && run.visited.includes(id) ? 'walked' : ''}"/>`;
+    }
+  }
+  const btns = Object.values(nodes).map(n => {
+    const p = nodePos(n);
+    const info = NODE_INFO[n.type];
+    const cls = [avail.has(n.id) ? 'available' : '', run.visited.includes(n.id) ? 'visited' : '', run.pos === n.id ? 'current' : '', n.type].join(' ');
+    const label = n.id === 'boss' ? bossLabel() : info.label;
+    return `<button class="node ${cls}" style="left:${p.x}%;top:${p.y}px" data-act="visitNode" data-arg="${n.id}" ${avail.has(n.id) ? '' : 'disabled'} title="${esc(label)}" aria-label="${esc(label)}">${info.icon}</button>`;
+  }).join('');
+  return `<section class="map-layout">
+    <div class="panel map-panel">
+      <div class="row"><div><p class="eyebrow">${esc(ACTS[run.act - 1].name)}</p><h2>Choose your path</h2></div>
+        <span class="muted">Boss: ${esc(bossLabel())}</span></div>
+      <div class="map" style="height:${height}px"><svg width="100%" height="${height}">${lines}</svg>${btns}</div>
+      <div class="legend">${Object.entries(NODE_INFO).filter(([k]) => k !== 'boss').map(([, v]) => `<span title="${esc(v.desc)}">${v.icon} ${v.label}</span>`).join('')}</div>
+    </div>
+    ${sidePanel()}
+  </section>`;
+};
+function bossLabel() {
+  const b = ACTS[S.run.act - 1].boss;
+  return b === 'gym' ? 'Gym Leader' : b === 'villainBoss' ? 'Villain Team Boss' : 'Elite Four & Champion';
+}
+function sidePanel() {
+  const run = S.run;
+  return `<aside class="panel side">
+    <h3>Team <small class="muted">${run.party.length}/6 · Box ${run.box.length}</small></h3>
+    <div class="party-list">${run.party.map((m, i) => monCard(m, i)).join('')}</div>
+    <div class="row gap wrap"><button data-act="openBag">Bag</button><button data-act="openTeam">Team</button></div>
+    <h3>Badges <small class="muted">${run.badges.length}</small></h3>
+    <div class="badges">${run.badges.length ? run.badges.map(b => `<span class="badge" title="${esc(b.leader)}">${esc(b.name)}</span>`).join('') : '<span class="muted small">Defeat Gym Leaders to earn badges.</span>'}</div>
+    <p class="muted small">Battles won: ${run.stats.wins} · Caught: ${run.stats.caught}</p>
+    <div class="row gap wrap"><button class="ghost" data-act="toMenu">Save & quit</button><button class="ghost danger" data-act="abandonRun">Abandon run</button></div>
+  </aside>`;
+}
+
+registerActions({
+  visitNode: id => visitNode(id),
+  toMenu: async () => { await flushSaves(); go('menu'); },
+  abandonRun: () => { S.modal = { type: 'confirm', text: 'Abandon this run? It will be recorded in your history.', yes: 'confirmAbandon' }; render(); },
+  confirmAbandon: async () => { S.modal = null; await endRun('Abandoned'); go('menu'); },
+});
+
+function visitNode(id) {
+  const run = S.run;
+  if (!availableNodes(run).includes(id)) return;
+  const node = run.map.nodes[id];
+  run.pos = id;
+  run.visited.push(id);
+  run.stats.nodes++;
+  run.party.forEach(m => { if (m.hp > 0) m.fr = Math.min(255, m.fr + 1); }); // walking together builds friendship
+  if (node.type === 'boss' && ACTS[run.act - 1].boss === 'league') {
+    startLeague(run);
+    persistRun();
+    go('league');
+    return;
+  }
+  if (['stop', 'mart', 'center'].includes(node.type)) {
+    run.node = { type: node.type };
+    if (node.type === 'stop') run.node.spun = false;
+    if (node.type === 'center') healParty(run);
+    persistRun();
+    go('node');
+    return;
+  }
+  const spec = buildEncounter(run, node);
+  spec.node = node.type;
+  launchBattle(spec);
+}
+
+export function launchBattle(spec) {
+  const run = S.run;
+  const events = startBattle(run, spec);
+  run.battle.node = spec.node || spec.kind;
+  run.stats.battles++;
+  persistRun();
+  beginBattle(events);
+}
+
+// ---------- Service nodes: PokéStop, PokéMart, Pokémon Center ----------
+SCREENS.node = () => {
+  const run = S.run, n = run.node;
+  if (n.type === 'stop') {
+    return `<section class="panel narrow center-text">
+      <p class="eyebrow">PokéStop</p>
+      <div class="pokestop ${n.spun ? 'spun' : ''}">🔷</div>
+      ${n.spun ? `<h2>Items received</h2><ul class="loot">${n.result.items.map(([it, c]) => `<li>${itemImg(it)} ${esc(it)} ×${c}</li>`).join('')}${n.result.money ? `<li>💰 ₽${n.result.money.toLocaleString()}</li>` : ''}</ul>
+        <button class="primary" data-act="leaveNode">Continue</button>`
+        : `<h2>Spin the Photo Disc</h2><p class="muted">PokéStops hand out free supplies.</p><button class="primary big" data-act="spinStop">Spin!</button>`}
+    </section>`;
+  }
+  if (n.type === 'mart') {
+    const stock = martStock(run);
+    return `<section class="panel">
+      <div class="row"><div><p class="eyebrow">PokéMart</p><h2>Welcome! How may I help you?</h2></div><span class="money big-money">₽${run.money.toLocaleString()}</span></div>
+      <div class="shop">${stock.map(s => `<div class="shop-item">
+        ${itemImg(s.name)}<div><strong>${esc(s.name)}</strong><p class="muted small">${esc(ITEMS[s.name].desc)}</p><small>In bag: ${run.bag[s.name] || 0}</small></div>
+        <div class="buy"><span>₽${s.price.toLocaleString()}</span>
+          <button data-act="buy" data-arg="${esc(s.name)}|1" ${run.money < s.price ? 'disabled' : ''}>Buy</button>
+          <button data-act="buy" data-arg="${esc(s.name)}|5" ${run.money < s.price * 5 ? 'disabled' : ''}>×5</button></div></div>`).join('')}</div>
+      <div class="row gap"><button data-act="openBag">Bag</button><button class="primary" data-act="leaveNode">Leave</button></div>
+    </section>`;
+  }
+  if (n.type === 'center') {
+    return `<section class="panel">
+      <p class="eyebrow">Pokémon Center</p>
+      <h2>Your Pokémon are fully healed!</h2>
+      <p class="muted">We hope to see you again! Use the PC to move Pokémon between your team and the Box.</p>
+      ${pcView()}
+      <div class="row gap"><button class="primary" data-act="leaveNode">Leave</button></div>
+    </section>`;
+  }
+  return '';
+};
+
+function pcView() {
+  const run = S.run;
+  return `<div class="pc">
+    <div><h3>Team (${run.party.length}/6)</h3><div class="party-list">${run.party.map((m, i) => monCard(m, i, { action: 'depositMon', extra: '<span class="small">→ Box</span>' })).join('')}</div></div>
+    <div><h3>Box (${run.box.length})</h3><div class="party-list">${run.box.length ? run.box.map((m, i) => monCard(m, i, { action: 'withdrawMon', extra: '<span class="small">→ Team</span>' })).join('') : '<p class="muted small">Pokémon caught with a full team go here.</p>'}</div></div>
+  </div>`;
+}
+
+registerActions({
+  spinStop: () => {
+    const n = S.run.node;
+    if (n.spun) return;
+    n.result = spinPokeStop(S.run);
+    n.spun = true;
+    sfx('coin');
+    persistRun();
+    render();
+  },
+  buy: arg => {
+    const [name, qty] = arg.split('|');
+    const cost = ITEMS[name].price * +qty;
+    if (S.run.money < cost) { sfx('error'); return; }
+    S.run.money -= cost;
+    addItem(S.run, name, +qty);
+    sfx('coin');
+    persistRun();
+    render();
+  },
+  depositMon: i => {
+    const run = S.run;
+    if (run.party.length <= 1) { toast('You need at least one Pokémon on your team.'); return; }
+    run.box.push(...run.party.splice(+i, 1));
+    if (!run.party.some(m => m.hp > 0)) { run.party.unshift(...run.box.splice(-1, 1)); toast('Keep at least one healthy Pokémon on your team.'); }
+    persistRun(); render();
+  },
+  withdrawMon: i => {
+    const run = S.run;
+    if (run.party.length >= 6) { toast('Your team is full. Deposit a Pokémon first.'); return; }
+    const [m] = run.box.splice(+i, 1);
+    healPartyMon(m);
+    run.party.push(m);
+    persistRun(); render();
+  },
+  leaveNode: () => { S.run.node = null; persistRun(); go('map'); },
+});
+function healPartyMon(m) { m.hp = maxHp(m); m.st = null; m.moves.forEach(x => { x.pp = MOVES[x.id].pp; }); }
+
+// ---------- Team & summary overlays ----------
+registerActions({
+  openTeam: () => { S.modal = { type: 'team' }; render(); },
+  showSummary: i => { S.modal = { type: 'summary', index: +i }; render(); },
+  moveUp: i => {
+    i = +i;
+    const p = S.run.party;
+    if (i > 0) [p[i - 1], p[i]] = [p[i], p[i - 1]];
+    S.modal = { type: 'summary', index: Math.max(0, i - 1) };
+    persistRun(); render();
+  },
+  makeLead: i => {
+    const p = S.run.party;
+    const [m] = p.splice(+i, 1); p.unshift(m);
+    S.modal = { type: 'summary', index: 0 };
+    persistRun(); render();
+  },
+  openBag: () => { S.modal = { type: 'bag', pocket: 0 }; render(); },
+  bagPocket: p => { S.modal.pocket = +p; render(); },
+  bagItem: name => { S.modal = { type: 'bagTarget', item: name }; render(); },
+  useItemOn: i => useFieldItem(S.modal.item, +i),
+});
+
+function renderModal() {
+  const m = S.modal;
+  let body = '';
+  if (m.type === 'confirm') {
+    body = `<p>${esc(m.text)}</p><div class="row gap"><button data-act="closeModal">Cancel</button><button class="primary danger" data-act="${m.yes}">Confirm</button></div>`;
+  } else if (m.type === 'confirmStarter') {
+    const sp = DEX[m.id];
+    body = `<div class="center-text">${img(artUrl(m.id), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
+      <p class="muted">Start your journey with ${sp.n}?</p></div>
+      <div class="row gap"><button data-act="closeModal">Not yet</button><button class="primary" data-act="confirmStarter" data-arg="${m.id}">I choose you!</button></div>`;
+  } else if (m.type === 'team') {
+    body = `<h2>Team</h2><div class="party-list">${S.run.party.map((x, i) => monCard(x, i)).join('')}</div>
+      <p class="muted small">Select a Pokémon to see its summary, change the lead, or use an item.</p>
+      <div class="row gap"><button data-act="openBag">Bag</button><button class="primary" data-act="closeModal">Close</button></div>`;
+  } else if (m.type === 'summary') {
+    body = summaryHtml(S.run.party[m.index], m.index);
+  } else if (m.type === 'bag') {
+    body = bagHtml(m.pocket);
+  } else if (m.type === 'bagTarget') {
+    body = `<h2>Use ${esc(m.item)}</h2><p class="muted">${esc(ITEMS[m.item].desc)}</p>
+      <div class="party-list">${S.run.party.map((x, i) => monCard(x, i, { action: 'useItemOn', extra: itemHint(m.item, x) })).join('')}</div>
+      <div class="row gap"><button data-act="openBag">Back</button></div>`;
+  }
+  return `<div class="modal-backdrop"><div class="modal panel" role="dialog" aria-modal="true">${body}</div></div>`;
+}
+
+function itemHint(item, mon) {
+  const it = ITEMS[item];
+  if (it.kind === 'evo') return itemEvolution(mon, item) ? '<span class="small good-text">Able</span>' : '<span class="small muted">Unable</span>';
+  return '';
+}
+
+function summaryHtml(mon, index) {
+  const sp = DEX[mon.id];
+  const stats = calcStats(mon);
+  const next = expForLevel(sp.gr, mon.lv + 1), cur = expForLevel(sp.gr, mon.lv);
+  const pct = mon.lv >= 100 ? 100 : ((mon.exp - cur) / (next - cur)) * 100;
+  return `<div class="summary">
+    <div class="summary-head">
+      ${img(artUrl(mon.id), 'summary-art', sp.n)}
+      <div><h2>${esc(monName(mon))}${mon.shiny ? ' ✦' : ''} <small>Lv ${mon.lv}</small></h2>
+        <div>${sp.t.map(typeBadge).join('')} ${statusTag(mon.st)}</div>
+        <p class="small">#${mon.id} · ${NATURES[mon.nat]} nature · Ability: ${esc(mon.ab)}</p>
+        <p class="small">Friendship: ${mon.fr} · ${mon.lv < 100 ? `${(next - mon.exp).toLocaleString()} Exp. to Lv ${mon.lv + 1}` : 'Max level'}</p>
+        <div class="expbar"><i style="width:${pct}%"></i></div>
+      </div>
+    </div>
+    <div class="summary-cols">
+      <table class="stats">${stats.map((v, i) => {
+        const nm = natureMod(mon.nat, i);
+        return `<tr><th class="${nm > 1 ? 'up' : nm < 1 ? 'down' : ''}">${STAT_LABELS[i]}</th><td>${i === 0 ? `${mon.hp}/${v}` : v}</td><td class="bar"><i style="width:${Math.min(100, (sp.b[i] / 180) * 100)}%"></i></td></tr>`;
+      }).join('')}</table>
+      <div class="moves-list">${mon.moves.map(x => moveRow(x.id, x.pp)).join('')}</div>
+    </div>
+    ${evoHint(mon)}
+    <div class="row gap wrap">
+      ${index > 0 ? `<button data-act="makeLead" data-arg="${index}">Make lead</button><button data-act="moveUp" data-arg="${index}">Move up</button>` : ''}
+      <button data-act="openBag">Use item</button>
+      <button class="primary" data-act="openTeam">Back</button>
+    </div>
+  </div>`;
+}
+
+export function moveRow(id, pp) {
+  const mv = MOVES[id];
+  return `<div class="move-row" style="border-left-color:${TYPE_COLORS[mv.t]}">
+    <div class="row"><strong>${esc(mv.n)}</strong><span class="small">${pp != null ? `${pp}/${mv.pp} PP` : `${mv.pp} PP`}</span></div>
+    <div class="row small"><span>${typeBadge(mv.t)} ${mv.c === 'P' ? 'Physical' : mv.c === 'S' ? 'Status' : 'Special'}</span><span>Pow ${mv.p || '—'} · Acc ${mv.a || '—'}</span></div>
+    <p class="small muted">${esc(mv.d || '')}</p>
+  </div>`;
+}
+
+function evoHint(mon) {
+  const evos = DEX[mon.id].e || [];
+  if (!evos.length) return '';
+  const parts = evos.map(e => {
+    const to = DEX[e.to].n;
+    if (e.level && !e.type) return `${to} at Lv ${e.level}${e.cond ? ` (${e.cond.replace('with the console turned upside-down', '').replace('during rain', '').trim()})` : ''}`;
+    if (e.type === 'levelFriendship') return `${to} with high friendship${e.cond ? ' ' + e.cond : ''}`;
+    if (e.type === 'levelMove') return `${to} when leveling up knowing ${MOVES[e.move]?.n || e.move}`;
+    if (e.type === 'levelExtra' && e.cond?.includes('Fairy')) return `${to} with a Fairy move and high friendship`;
+    if (e.type === 'useItem' || e.type === 'levelHold') return `${to} with a ${e.item}`;
+    if (e.type === 'trade') return `${to} with ${e.item ? 'a ' + e.item : 'a Linking Cord'}`;
+    return `${to} with a Linking Cord`;
+  });
+  return `<p class="small muted">Evolves into: ${parts.map(esc).join(' · ')}</p>`;
+}
+
+function bagHtml(pocket) {
+  const run = S.run;
+  const [title, kinds] = BAG_POCKETS[pocket];
+  const items = Object.entries(run.bag).filter(([k, v]) => v > 0 && ITEMS[k] && kinds.includes(ITEMS[k].kind));
+  return `<h2>Bag</h2>
+    <div class="tabs">${BAG_POCKETS.map(([t], i) => `<button class="${i === pocket ? 'active' : ''}" data-act="bagPocket" data-arg="${i}">${t}</button>`).join('')}</div>
+    <div class="bag-list">${items.length ? items.map(([k, v]) => `<button class="bag-item" data-act="bagItem" data-arg="${esc(k)}" ${ITEMS[k].kind === 'ball' ? 'disabled' : ''}>
+      ${itemImg(k)}<span><strong>${esc(k)}</strong><small class="muted">${esc(ITEMS[k].desc)}</small></span><b>×${v}</b></button>`).join('') : `<p class="muted">No ${title.toLowerCase()}.</p>`}</div>
+    <div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`;
+}
+
+function useFieldItem(item, index) {
+  const run = S.run;
+  const mon = run.party[index];
+  const it = ITEMS[item];
+  if (!mon || !run.bag[item]) return;
+  if (it.kind === 'evo') {
+    const to = itemEvolution(mon, item);
+    if (!to || mon.hp <= 0) { toast("It won't have any effect."); return; }
+    run.bag[item]--;
+    S.modal = null;
+    queueFlow([{ type: 'evolve', uid: mon.uid, to, item }]);
+    return;
+  }
+  if (it.kind === 'candy' || it.kind === 'expcandy') {
+    if (mon.lv >= 100 || mon.hp <= 0) { toast("It won't have any effect."); return; }
+    run.bag[item]--;
+    const steps = [];
+    const before = mon.lv;
+    const events = it.kind === 'candy' ? levelUp(mon) : gainExp(mon, it.amount);
+    for (const e of events) {
+      if (e.type === 'level') steps.push({ type: 'msg', text: `${monName(mon)} grew to Lv. ${e.lv}!`, sfx: 'levelup' });
+      if (e.type === 'learn') steps.push({ type: 'msg', text: `${monName(mon)} learned ${MOVES[e.move].n}!` });
+      if (e.type === 'learnFull') steps.push({ type: 'learn', uid: mon.uid, move: e.move });
+    }
+    if (mon.lv === before) steps.push({ type: 'msg', text: `${monName(mon)} gained ${it.amount.toLocaleString()} Exp. Points!` });
+    const evo = mon.lv > before ? levelEvolution(mon, run.party) : null;
+    if (evo) steps.push({ type: 'evolve', uid: mon.uid, to: evo });
+    S.modal = null;
+    queueFlow(steps);
+    return;
+  }
+  const res = applyItem(mon, item);
+  if (!res.ok) { toast("It won't have any effect."); sfx('error'); return; }
+  run.bag[item]--;
+  sfx('heal');
+  toast(res.msg);
+  persistRun();
+  render();
+}
+
+// ---------- Flows: move learning, evolution, messages (persisted in run.flow) ----------
+export function queueFlow(steps, then = null) {
+  const run = S.run;
+  run.flow = [...(run.flow || []), ...steps];
+  if (then) run.flowThen = then;
+  persistRun();
+  render();
+  if (run.flow[0]?.type === 'evolve') sfx('evolve');
+}
+
+function findMon(uid) { return S.run.party.find(m => m.uid === uid) || S.run.box.find(m => m.uid === uid); }
+
+function renderFlow() {
+  const step = S.run.flow[0];
+  const mon = step.uid ? findMon(step.uid) : null;
+  let body = '';
+  if (step.type === 'msg') {
+    body = `<p class="big-text">${esc(step.text)}</p><button class="primary" data-act="flowNext">OK</button>`;
+  } else if (step.type === 'learn' && mon) {
+    body = `<h2>${esc(monName(mon))} wants to learn ${esc(MOVES[step.move].n)}</h2>
+      <p class="muted">But ${esc(monName(mon))} already knows four moves. Choose a move to forget.</p>
+      ${moveRow(step.move)}
+      <div class="forget-grid">${mon.moves.map((x, i) => `<button data-act="forgetMove" data-arg="${i}">${esc(MOVES[x.id].n)}<small>${MOVES[x.id].t} · ${x.pp}/${MOVES[x.id].pp} PP</small></button>`).join('')}</div>
+      <button class="ghost" data-act="skipLearn">Don't learn ${esc(MOVES[step.move].n)}</button>`;
+  } else if (step.type === 'evolve' && mon) {
+    const done = step.done;
+    body = `<div class="center-text evolution ${done ? 'done' : ''}">
+      <p class="big-text">${done ? `Congratulations! Your ${esc(DEX[step.from].n)} evolved into ${esc(DEX[mon.id].n)}!` : `What? ${esc(monName(mon))} is evolving!`}</p>
+      <div class="evo-stage">${img(artUrl(done ? mon.id : mon.id), 'evo-from', '')}${done ? '' : img(artUrl(step.to), 'evo-to', '')}</div>
+      ${done ? '<button class="primary" data-act="flowNext">Continue</button>'
+        : `<div class="row gap center"><button data-act="cancelEvolve">Stop evolution</button><button class="primary" data-act="doEvolve">Evolve!</button></div>`}
+    </div>`;
+  } else {
+    S.run.flow.shift();
+    return S.run.flow.length ? renderFlow() : '';
+  }
+  return `<div class="modal-backdrop flow"><div class="modal panel" role="dialog" aria-modal="true">${body}</div></div>`;
+}
+
+function flowAdvance() {
+  const run = S.run;
+  run.flow.shift();
+  if (!run.flow.length) {
+    const then = run.flowThen;
+    run.flowThen = null;
+    persistRun();
+    if (then) FLOW_THEN[then]?.();
+    else render();
+    return;
+  }
+  const s = run.flow[0];
+  if (s.type === 'evolve') sfx('evolve');
+  if (s.sfx) sfx(s.sfx);
+  persistRun();
+  render();
+}
+
+registerActions({
+  flowNext: () => flowAdvance(),
+  forgetMove: i => {
+    const step = S.run.flow[0];
+    const mon = findMon(step.uid);
+    const old = MOVES[mon.moves[+i].id].n;
+    replaceMove(mon, +i, step.move);
+    S.run.flow.splice(1, 0, { type: 'msg', text: `1, 2, and… Poof! ${monName(mon)} forgot ${old} and learned ${MOVES[step.move].n}!` });
+    sfx('learn');
+    flowAdvance();
+  },
+  skipLearn: () => {
+    const step = S.run.flow[0];
+    const mon = findMon(step.uid);
+    S.run.flow.splice(1, 0, { type: 'msg', text: `${monName(mon)} did not learn ${MOVES[step.move].n}.` });
+    flowAdvance();
+  },
+  doEvolve: () => {
+    const step = S.run.flow[0];
+    const mon = findMon(step.uid);
+    step.from = mon.id;
+    const events = evolve(mon, step.to);
+    step.done = true;
+    playCry(step.to);
+    sfx('levelup');
+    const extra = [];
+    for (const e of events) {
+      if (e.type === 'learn') extra.push({ type: 'msg', text: `${monName(mon)} learned ${MOVES[e.move].n}!` });
+      if (e.type === 'learnFull') extra.push({ type: 'learn', uid: mon.uid, move: e.move });
+    }
+    S.run.flow.splice(1, 0, ...extra);
+    persistRun();
+    render();
+  },
+  cancelEvolve: () => {
+    const step = S.run.flow[0];
+    const mon = findMon(step.uid);
+    if (step.item) addItem(S.run, step.item); // item is not consumed when cancelled
+    S.run.flow.splice(1, 0, { type: 'msg', text: `Huh? ${monName(mon)} stopped evolving!` });
+    flowAdvance();
+  },
+});
+
+// Continuations after a flow finishes (by name so they survive a reload)
+const FLOW_THEN = {
+  map: () => { S.run.node = null; persistRun(); go('map'); },
+  league: () => go('league'),
+  actDone: () => go('actDone'),
+  hallOfFame: () => go('hallOfFame'),
+  battle: () => resumeBattleUI(),
+};
+
+// ---------- After a battle ----------
+export function finishBattle() {
+  const run = S.run;
+  const b = run.battle;
+  const result = b.over;
+  const steps = [];
+  let then = 'map';
+  // Winning with the last hit while your own team went down (recoil, poison) still counts as a blackout
+  if (result !== 'lose' && !run.party.some(m => m.hp > 0)) b.over = 'lose';
+  if (b.over === 'lose') {
+    const who = b.trainer ? `${b.trainer.title} ${b.trainer.name}` : `${b.kind === 'legendary' ? 'Legendary' : 'wild'} ${DEX[b.enemy[b.ei].id].n}`;
+    run.battle = null;
+    endRun('Defeated', who).then(() => go('runOver', { who }));
+    return;
+  }
+  if (result === 'win' || result === 'caught') run.stats.wins += result === 'win' ? 1 : 0;
+
+  if (result === 'caught') {
+    const mon = b.caughtMon;
+    const where = storeCaught(run, mon);
+    if (where === 'box') steps.push({ type: 'msg', text: `${monName(mon)} was sent to the Box.` });
+    if (!S.profile.caught.includes(mon.id)) {
+      S.profile.caught.push(mon.id);
+      steps.push({ type: 'msg', text: `${DEX[mon.id].n} joined your starter pool for future runs!` });
+    }
+    S.profile.stats.caught++;
+    persistProfile();
+  }
+
+  // Level-up evolutions happen after battle, like the games
+  for (const uid of b.leveled) {
+    const mon = run.party.find(m => m.uid === uid);
+    if (!mon || mon.hp <= 0) continue;
+    const to = levelEvolution(mon, run.party);
+    if (to) steps.push({ type: 'evolve', uid, to });
+  }
+
+  if (result === 'win' || result === 'caught') {
+    if (b.kind === 'elite') {
+      const [item, n] = eliteReward(run);
+      steps.push({ type: 'msg', text: `The Elite Pokémon left behind ${n > 1 ? n + '× ' : 'a '}${item}!` });
+    }
+    if (b.kind === 'gym' && result === 'win') {
+      run.badges.push({ name: b.trainer.badge, leader: b.trainer.leader, type: b.trainer.type });
+      run.beatenGyms.push(b.trainer.leader);
+      steps.push({ type: 'msg', text: `You received the ${b.trainer.badge} from ${b.trainer.leader}!` });
+    }
+    const isActBoss = run.map.nodes[run.pos]?.type === 'boss';
+    if (isActBoss && (b.kind === 'gym' || b.kind === 'villainBoss')) then = 'actDone';
+    if (b.kind === 'e4') { run.league.stage++; then = 'league'; }
+    if (b.kind === 'champion') { run.league.stage++; then = 'hallOfFame'; }
+  }
+  run.battle = null;
+  if (steps.length) queueFlow(steps, then);
+  else { persistRun(); FLOW_THEN[then](); }
+}
+
+// ---------- Act transitions, League, Hall of Fame ----------
+SCREENS.actDone = () => {
+  playMusic('victory');
+  const run = S.run;
+  return `<section class="panel narrow center-text">
+    <p class="eyebrow">Act ${run.act} complete</p>
+    <h2>${esc(ACTS[run.act - 1].name)} cleared!</h2>
+    <p>Your team rests at a Pokémon Center before the next leg of the journey.</p>
+    <div class="team-strip big">${run.party.map(m => img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', monName(m))).join('')}</div>
+    <p class="muted">Next: ${esc(ACTS[run.act].name)}</p>
+    <button class="primary big" data-act="nextAct">Set off</button>
+  </section>`;
+};
+registerActions({
+  nextAct: () => {
+    const run = S.run;
+    run.act++;
+    run.map = generateMap(run.act);
+    run.pos = null; run.visited = [];
+    healParty(run);
+    persistRun();
+    go('map');
+  },
+});
+
+SCREENS.league = () => {
+  playMusic('boss');
+  const run = S.run;
+  const opp = leagueOpponent(run);
+  const stage = run.league.stage;
+  return `<section class="panel narrow center-text league">
+    <p class="eyebrow">Pokémon League · ${stage < 4 ? `Elite Four ${stage + 1}/4` : 'Champion'}</p>
+    ${img(trainerSpriteUrl(opp.info.sprite), 'trainer-art', opp.info.name)}
+    <h2>${opp.title} ${esc(opp.info.name)}</h2>
+    <p class="muted">${esc(opp.info.region)}${opp.info.type ? ' · ' + typeBadge(opp.info.type) : ''}</p>
+    <p>${stage < 4 ? 'There is no healing between Elite Four battles. Use your items wisely.' : 'This is the final battle. Win, and your team enters the Hall of Fame!'}</p>
+    <div class="party-list">${run.party.map((m, i) => monCard(m, i)).join('')}</div>
+    <div class="row gap center"><button data-act="openBag">Bag</button><button data-act="openTeam">Team</button><button class="primary big" data-act="challengeLeague">Challenge!</button></div>
+  </section>`;
+};
+registerActions({
+  challengeLeague: () => {
+    if (!S.run.party.some(m => m.hp > 0)) return;
+    const spec = leagueOpponent(S.run).spec();
+    launchBattle(spec);
+  },
+});
+
+SCREENS.hallOfFame = () => {
+  playMusic('hall');
+  const run = S.run;
+  return `<section class="panel center-text hof">
+    <p class="eyebrow">Congratulations!</p>
+    <h1>Hall of Fame</h1>
+    <p>You defeated the Elite Four and Champion ${esc(run.league.champion.split('|')[0])}! Your team is now recorded in the Hall of Fame.</p>
+    <div class="hof-team">${run.party.map(m => `<figure>${img(artUrl(m.id), '', monName(m))}<figcaption>${esc(monName(m))}<br><small>Lv ${m.lv}</small></figcaption></figure>`).join('')}</div>
+    <button class="primary big" data-act="enterHall">Finish run</button>
+  </section>`;
+};
+registerActions({
+  enterHall: async () => {
+    const run = S.run;
+    S.profile.hallOfFame.push({ date: new Date().toISOString(), champion: run.league.champion.split('|')[0], team: partySummary(run.party), starter: run.starter });
+    S.profile.stats.champions++;
+    persistProfile();
+    await endRun('Champion');
+    go('menu');
+  },
+});
+
+SCREENS.runOver = () => {
+  playMusic('menu');
+  return `<section class="panel narrow center-text">
+    <p class="eyebrow">Run over</p>
+    <h2>You blacked out!</h2>
+    <p>Your team was defeated by ${esc(S.ui.who || 'a strong opponent')}.</p>
+    <p class="muted">Pokémon you caught on this run stay in your starter pool.</p>
+    <div class="row gap center"><button data-act="openHistory">View history</button><button class="primary" data-act="play">Play again</button></div>
+  </section>`;
+};
+
+/** Record a finished run in history and clear it. */
+export async function endRun(result, defeatedBy = null) {
+  const run = S.run;
+  if (!run) return;
+  cancelRunSave();
+  const reached = run.league ? (run.league.stage >= 5 ? 'Hall of Fame' : run.league.stage === 4 ? 'Champion' : `Elite Four ${run.league.stage + 1}`) : `Act ${run.act}, floor ${run.pos ? run.map.nodes[run.pos].r + 1 : 0}`;
+  const entry = {
+    result, starter: run.starter, act: run.act, reached, badges: run.badges.length,
+    caught: run.stats.caught, wins: run.stats.wins, team: partySummary(run.party),
+    startedAt: run.startedAt, durationMin: Math.round((Date.now() - new Date(run.startedAt).getTime()) / 60000),
+    ...(defeatedBy ? { defeatedBy } : {}),
+  };
+  S.run = null;
+  S.history = null;
+  try { await api.addHistory(entry); } catch { toast('Could not save this run to history.'); }
+}
+
+export function resumeRun() {
+  const run = S.run;
+  if (!run) return go('menu');
+  if (run.battle) { beginBattle([], true); return; }
+  if (run.pos === 'boss' && !run.league) return go('actDone');
+  if (run.league && run.map.nodes[run.pos]?.type === 'boss') {
+    if (run.league.stage >= 5) return go('hallOfFame');
+    return go('league');
+  }
+  if (run.node) return go('node');
+  if (run.flow?.length) { go('map'); return; }
+  go('map');
+}
+
+export { SCREENS, onBattleAction, renderBattle, finishBattle as _finishBattle };
