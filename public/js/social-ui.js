@@ -6,7 +6,7 @@ import { natureLabel, STAT_SHORT } from './mechanics.js';
 import { ACHIEVEMENTS, missionList, claimMission, POINT_RULES, DIFF_POINT_MULT } from './progress.js';
 import {
   SCREENS, registerActions, go, render, esc, typeBadge, toast, persistProfile, pokedexCount, refreshMissionCount,
-  filterBar, filterState, sortSpecies, abilityInfo, unlockedFor,
+  filterBar, filterState, sortSpecies, abilityInfo, unlockedFor, evolutionChain, learnsetTable,
 } from './ui.js';
 import { sfx, playMusic } from './audio.js';
 
@@ -211,10 +211,6 @@ export function dexEntryHtml(id) {
       <div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`;
   }
   const un = unlockedFor(id);
-  const line = [];
-  let root = familyRoot(id);
-  const walk = (x, depth) => { line.push({ id: x, depth }); for (const e of DEX[x].e || []) walk(e.to, depth + 1); };
-  walk(root, 0);
   return `<div class="dex-detail">
     <div class="center-text"><div class="dex-no">#${String(id).padStart(4, '0')} · ${REGIONS[regionOf(id)].name}</div>
       ${img(artUrl(id, shiny && S.ui.dexShiny), 'modal-art', sp.n)}
@@ -227,8 +223,10 @@ export function dexEntryHtml(id) {
     <div class="abilities-preview">${[...sp.a.map(a => abilityInfo(a, false)), sp.h ? abilityInfo(sp.h, true) : ''].join('')}</div>
     <h4>Unlocked for this family</h4>
     <p class="small">${un.natures.length ? `Natures: ${un.natures.map(n => esc(natureLabel(n))).join(', ')}` : 'No natures yet.'}<br>${un.abilities.length ? `Abilities: ${un.abilities.map(esc).join(', ')}` : ''}${un.shiny ? '<br><span class="shiny-mark">✦</span> Shiny starter unlocked' : ''}</p>
-    <h4>Evolution line</h4>
-    <div class="evo-line">${line.map(x => `<span style="margin-left:${x.depth * 18}px" class="${x.id === id ? 'current' : ''}">${img(spriteUrl(x.id), 'mini-sprite', DEX[x.id].n)} ${esc(DEX[x.id].n)}</span>`).join('')}</div>
+    <h4>Evolution</h4>
+    ${evolutionChain(id)}
+    <h4>Moveset <small class="muted">(level-up moves)</small></h4>
+    ${learnsetTable(id)}
     <div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>
   </div>`;
 }

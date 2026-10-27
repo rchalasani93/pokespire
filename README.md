@@ -33,6 +33,8 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Filter and sort.** The starter screen, Team and Box can be searched by name, filtered by type (and region), and sorted by Dex No., name, level, HP, base stat total, each stat, IV total or EV total.
 
+**Movesets and evolution requirements.** Like PokéRogue, every Pokémon's full level-up moveset is shown as a table (level, move, type, category, power, accuracy, PP, description) in the Pokédex, when picking a starter, and in the summary. In the summary, moves at or below the current level can be relearned anytime (a built-in Move Reminder). Evolution requirements are shown as a family tree with each step's condition (level, item, friendship, time of day, known move) in the Pokédex and starter pick, and with live progress in the summary. Admins can also teach moves early and evolve a Pokémon instantly; both mark the run as admin tools used.
+
 **Points, leaderboard and friends.** Every win and catch adds points to the run (more for tougher opponents, multiplied by difficulty: Easy ×0.5, Medium ×1, Hard ×1.5, Hell ×2.5). The leaderboard ranks players by best run and by total points. Search players by username to add them as friends; the corner badge shows how many players are online (Supabase Realtime presence), and friends show an online dot.
 
 **Missions and achievements.** Three daily and three weekly missions (the same for everyone each day and week) award bonus points when claimed, and 24 achievements (catching, shinies, Legendaries, badges, the Hall of Fame on each difficulty, a Classic win in every region and more) add points automatically. Runs using God mode or other admin tools score 0 and don't count.

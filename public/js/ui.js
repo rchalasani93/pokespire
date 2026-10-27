@@ -1,7 +1,7 @@
 // Screens, overlays and player flows (everything except the battle screen).
 import { S, defaultProfile, normalizeProfile } from './state.js';
 import { api, configured, saveRun, saveProfile, flushSaves, cancelRunSave, joinPresence, leavePresence } from './api.js';
-import { DEX, MOVES, REGIONS, ABILITIES, regionOf, familyRoot, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS } from './data.js';
+import { DEX, MOVES, LEARN, REGIONS, ABILITIES, regionOf, familyRoot, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS, movesAtLevel } from './data.js';
 import {
   createMon, calcStats, maxHp, monName, NATURES, STAT_LABELS, STAT_SHORT, natureMod, natureLabel, ivJudge, expForLevel, gainExp, levelUp, evoItemFor,
   levelEvolution, itemEvolution, evolve, replaceMove,
@@ -373,6 +373,30 @@ registerActions({
   starterAbility: v => { S.modal.ab = v || undefined; },
   starterShiny: (_, el) => { S.modal.shiny = el.checked; render(); },
   dexShinyToggle: (_, el) => { S.ui.dexShiny = el.checked; render(); },
+  toggleLearnset: () => { S.modal.showLearnset = !S.modal.showLearnset; render(); },
+  teachMove: moveId => {
+    const mon = summaryMon(S.modal);
+    if (!mon || mon.moves.some(x => x.id === moveId)) return;
+    const entry = (LEARN[mon.id] || []).find(([, m]) => m === moveId);
+    if (!entry) return;
+    if (entry[0] > mon.lv) {
+      if (!S.user?.isAdmin) return;
+      S.run.godUsed = true; // admin teaching early
+    }
+    if (mon.moves.length < 4) {
+      mon.moves.push({ id: moveId, pp: MOVES[moveId].pp });
+      sfx('learn'); toast(`${monName(mon)} learned ${MOVES[moveId].n}!`);
+      persistRun(); render();
+      return;
+    }
+    queueFlow([{ type: 'learn', uid: mon.uid, move: moveId }]);
+  },
+  adminEvolve: adminOnly(to => {
+    const mon = summaryMon(S.modal);
+    if (!mon || !(DEX[mon.id].e || []).some(e => e.to === +to)) return;
+    S.run.godUsed = true;
+    queueFlow([{ type: 'evolve', uid: mon.uid, to: +to }]);
+  }),
 });
 registerActions({ pickMode: key => go('difficulty', { mode: key }) });
 
@@ -748,6 +772,12 @@ function renderModal() {
       </div>` : '';
     body = `<div class="center-text">${img(artUrl(m.id, m.shiny), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
       <div class="abilities-preview">${[...sp.a.map(a => abilityInfo(a, false)), sp.h ? abilityInfo(sp.h, true) : ''].join('')}</div>
+      <h4>Starting moves (Lv 5)</h4>
+      <div class="move-chips">${movesAtLevel(m.id, 5).map(x => `<span class="move-chip" style="--tc:${TYPE_COLORS[MOVES[x].t]}" title="${esc(MOVES[x].d || '')}">${esc(MOVES[x].n)}<small>${MOVES[x].t} · ${CAT[MOVES[x].c]}${MOVES[x].p ? ' · ' + MOVES[x].p : ''}</small></span>`).join('')}</div>
+      <h4>Evolution</h4>
+      ${evolutionChain(m.id)}
+      <h4>Moveset <button class="small-btn" data-act="toggleLearnset">${m.showLearnset ? 'Hide' : 'Show'} all moves</button></h4>
+      ${m.showLearnset ? learnsetTable(m.id) : ''}
       ${pickers}
       <p class="muted">Start a ${GAME_MODES[m.mode].name} · ${DIFFICULTIES[m.difficulty].name} run with ${sp.n}?${m.mode === 'classic' ? ` You'll journey through ${REGIONS[regionOf(m.id)].name}.` : ''}</p></div>
       <div class="row gap"><button data-act="closeModal">Not yet</button><button class="primary" data-act="confirmStarter" data-arg="${m.id}">I choose you!</button></div>`;
@@ -844,6 +874,8 @@ function summaryHtml(mon, index, src = 'party') {
     </div>
     <h4>Moves</h4>
     <div class="moves-list two-col">${mon.moves.map(x => moveRow(x.id, x.pp)).join('')}</div>
+    <h4>Moveset <button class="small-btn" data-act="toggleLearnset">${S.modal?.showLearnset ? 'Hide' : 'Show'} all ${esc(sp.n)} moves</button></h4>
+    ${S.modal?.showLearnset ? learnsetTable(mon.id, { mon }) : ''}
     ${evolutionSection(mon)}
     <div class="row gap wrap">
       ${src === 'party' && index > 0 ? `<button data-act="makeLead" data-arg="${index}">Make lead</button><button data-act="moveUp" data-arg="${index}">Move up</button>` : ''}
@@ -862,6 +894,63 @@ export function moveRow(id, pp) {
   </div>`;
 }
 
+// ---------- Evolution requirements and movesets (shared by summary, starter pick and Pokédex) ----------
+/** Plain-language requirement for one evolution, e.g. "Lv 16" or "Use a Water Stone". */
+export function evoReqText(e) {
+  const item = evoItemFor(e);
+  const time = e.cond?.includes('during the day') ? ' during the day' : e.cond?.includes('at night') ? ' at night' : '';
+  if (item) {
+    const why = e.type === 'trade' && !e.item ? ' (instead of trading)' : e.type === 'trade' ? ' (instead of trading while holding it)'
+      : e.type === 'other' || (e.type === 'levelExtra' && !e.cond?.includes('Fairy')) ? ` (instead of: ${e.cond || 'a special condition'})` : '';
+    return `Use ${/^[AEIOU]/.test(item) ? 'an' : 'a'} ${item}${why}`;
+  }
+  if (e.type === 'levelFriendship') return `Level up with high friendship (160+)${time}`;
+  if (e.type === 'levelMove') return `Level up knowing ${MOVES[e.move]?.n || e.move}`;
+  if (e.type === 'levelExtra') return 'Level up with high friendship while knowing a Fairy-type move';
+  const extra = (e.cond || '').replace(/with the console turned upside-down|during rain/, '').trim();
+  return `Lv ${e.level}${time}${extra && !time ? ` (${extra})` : ''}`;
+}
+
+/** The whole evolution family as a tree, with requirements on each step. */
+export function evolutionChain(id) {
+  const root = familyRoot(id);
+  const node = (x, req) => `<div class="chain-node">
+      ${req ? `<div class="chain-req">↓ ${esc(req)}</div>` : ''}
+      <div class="chain-mon ${x === id ? 'current' : ''}">${img(spriteUrl(x), 'mini-sprite', DEX[x].n)}<span><strong>${esc(DEX[x].n)}</strong> ${DEX[x].t.map(typeBadge).join('')}</span></div>
+      ${(DEX[x].e || []).length ? `<div class="chain-children">${DEX[x].e.map(e => node(e.to, evoReqText(e))).join('')}</div>` : ''}
+    </div>`;
+  const single = !(DEX[root].e || []).length;
+  return `<div class="evo-chain">${node(root, '')}</div>${single ? `<p class="small muted">${esc(DEX[id].n)} does not evolve.</p>` : ''}`;
+}
+
+const CAT = { P: 'Physical', X: 'Special', S: 'Status' };
+/**
+ * PokéRogue-style level-up moveset: Lv · Move · Type · Category · Power · Accuracy · PP.
+ * With `mon`, known moves are ticked and moves it can learn now get a Teach button
+ * (admins can teach any move on the list).
+ */
+export function learnsetTable(id, { mon = null } = {}) {
+  const list = (LEARN[id] || []).filter(([, m]) => MOVES[m]);
+  const known = new Set(mon?.moves.map(m => m.id) || []);
+  const admin = !!S.user?.isAdmin;
+  const seen = new Set();
+  const rows = list.filter(([lv, m]) => { const k = lv + m; if (seen.has(k)) return false; seen.add(k); return true; }).map(([lv, m]) => {
+    const mv = MOVES[m];
+    const reachable = !mon || lv <= mon.lv;
+    const canTeach = mon && !known.has(m) && (reachable || admin);
+    return `<tr class="${known.has(m) ? 'known' : ''} ${reachable ? '' : 'locked'}" title="${esc(mv.d || '')}">
+      <td>${lv === 0 ? 'Evo' : lv}</td>
+      <td><strong>${esc(mv.n)}</strong>${known.has(m) ? ' <span class="good-text">✓</span>' : ''}<small class="muted move-desc">${esc(mv.d || '')}</small></td>
+      <td>${typeBadge(mv.t)}</td><td><span class="cat cat-${mv.c}">${CAT[mv.c]}</span></td>
+      <td>${mv.p || '—'}</td><td>${mv.a ? mv.a + '%' : '—'}</td><td>${mv.pp}</td>
+      ${mon ? `<td>${canTeach ? `<button class="small-btn ${reachable ? '' : 'admin-btn'}" data-act="teachMove" data-arg="${m}" title="${reachable ? 'Teach this move' : 'Admin: teach early'}">Teach</button>` : ''}</td>` : ''}
+    </tr>`;
+  }).join('');
+  return `<div class="table-scroll"><table class="moveset">
+    <tr><th>Lv</th><th>Move</th><th>Type</th><th>Cat.</th><th>Pow</th><th>Acc</th><th>PP</th>${mon ? '<th></th>' : ''}</tr>${rows}
+  </table></div>${mon ? `<p class="small muted">Moves at or below Lv ${mon.lv} can be relearned anytime, like a Move Reminder.${admin ? ' As an admin you can also teach moves early (marks the run as admin tools used).' : ''}</p>` : ''}`;
+}
+
 export function evolutionSection(mon) {
   const sp = DEX[mon.id];
   const run = S.run;
@@ -876,7 +965,7 @@ export function evolutionSection(mon) {
     let cond, ready = false;
     const time = e.cond?.includes('during the day') ? ` during the day (now: ${day ? 'day ✓' : 'night'})` : e.cond?.includes('at night') ? ` at night (now: ${day ? 'day' : 'night ✓'})` : '';
     if (item) {
-      cond = `Use ${item === 'Linking Cord' ? 'a Linking Cord' : `a ${item}`}${e.type === 'trade' && !e.item ? ' (stands in for trading)' : e.type === 'other' || (e.type === 'levelExtra' && !e.cond?.includes('Fairy')) ? ` (stands in for: ${e.cond || 'a special condition'})` : ''}. You have ${have}.`;
+      cond = `Use ${/^[AEIOU]/.test(item) ? 'an' : 'a'} ${item}${e.type === 'trade' && !e.item ? ' (stands in for trading)' : e.type === 'other' || (e.type === 'levelExtra' && !e.cond?.includes('Fairy')) ? ` (stands in for: ${e.cond || 'a special condition'})` : ''}. You have ${have}.`;
       ready = have > 0;
     } else if (e.type === 'levelFriendship') {
       cond = `Level up with friendship 160+${time}. Friendship now: ${mon.fr}.`;
@@ -892,7 +981,8 @@ export function evolutionSection(mon) {
       cond = `Reach Lv ${e.level}${time}${extra && !time ? ` (${extra})` : ''}. Now Lv ${mon.lv}.`;
       ready = mon.lv >= e.level;
     }
-    return `<div class="evo-row ${ready ? 'ready' : ''}">${img(spriteUrl(e.to), 'mini-sprite', to.n)}<div><strong>${esc(to.n)}</strong> ${to.t.map(typeBadge).join('')}<p class="small">${esc(cond)}</p></div></div>`;
+    const adminBtn = S.user?.isAdmin && run && mon.hp > 0 ? `<button class="small-btn admin-btn" data-act="adminEvolve" data-arg="${e.to}" title="Admin: evolve now">Evolve now</button>` : '';
+    return `<div class="evo-row ${ready ? 'ready' : ''}">${img(spriteUrl(e.to), 'mini-sprite', to.n)}<div><strong>${esc(to.n)}</strong> ${to.t.map(typeBadge).join('')}<p class="small">${esc(cond)}</p></div>${adminBtn}</div>`;
   }).join('');
   return `<h4>Evolution</h4>${from}<div class="evo-list">${rows}</div>`;
 }

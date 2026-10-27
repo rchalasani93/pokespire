@@ -103,11 +103,12 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
 .slider input { grid-column: 1 / -1; accent-color: var(--accent); padding: 0; }
 
 /* Starters */
-.starter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.starter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }
 .starter { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px; }
-.starter img { width: 80px; height: 80px; object-fit: contain; transition: transform .2s; }
+.starter img { width: 60px; height: 60px; object-fit: contain; transition: transform .2s; }
 .starter { padding: 10px 8px; }
-.starter strong { font-size: .9rem; }
+.starter strong { font-size: .82rem; }
+.starter .type { font-size: .6rem; padding: 1px 5px; }
 .starter:hover img { transform: scale(1.08) translateY(-4px); }
 .empty { grid-column: 1 / -1; padding: 30px; text-align: center; }
 .type { display: inline-block; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #fff; padding: 2px 7px; border-radius: 6px; margin: 1px; text-shadow: 0 1px 1px #0006; }
@@ -176,9 +177,9 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
 .menu-grid button { text-align: left; }
 .stat-row.four { grid-template-columns: repeat(4, 1fr); }
 .count-badge { background: var(--accent); color: #fff; border-radius: 10px; font-size: .72rem; padding: 0 7px; margin-left: 4px; }
-.dex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin-top: 10px; }
+.dex-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; margin-top: 10px; }
 .dex-entry { display: flex; flex-direction: column; align-items: center; padding: 6px; font-size: .82rem; }
-.dex-entry .dex-sprite { width: 68px; height: 68px; image-rendering: pixelated; }
+.dex-entry .dex-sprite { width: 56px; height: 56px; image-rendering: pixelated; }
 .dex-entry.missing .dex-sprite, .silhouette { filter: brightness(0) opacity(.45); }
 .dex-entry.missing strong { color: var(--muted); }
 .dex-no { font-size: .7rem; color: var(--muted); align-self: flex-start; }
@@ -218,6 +219,29 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
 .score-text { color: var(--accent2); }
 .shiny-pick { grid-column: 1 / -1; }
 @media (max-width: 640px) { .stat-row.four { grid-template-columns: repeat(2, 1fr); } .online-count { bottom: 8px; right: 8px; } }
+
+/* Evolution chains and movesets */
+.evo-chain { text-align: left; }
+.chain-node { margin-left: 0; }
+.chain-children { margin-left: 22px; border-left: 2px dashed var(--line); padding-left: 10px; }
+.chain-req { font-size: .78rem; color: var(--accent2); margin: 4px 0 2px; }
+.chain-mon { display: flex; align-items: center; gap: 6px; }
+.chain-mon .mini-sprite { width: 44px; height: 44px; }
+.chain-mon.current strong { color: var(--accent2); }
+.table-scroll { overflow-x: auto; max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
+.moveset { width: 100%; border-collapse: collapse; font-size: .82rem; text-align: left; }
+.moveset th { position: sticky; top: 0; background: var(--panel2); color: var(--muted); font-weight: 500; padding: 6px 8px; z-index: 1; }
+.moveset td { padding: 5px 8px; border-top: 1px solid #ffffff10; vertical-align: top; }
+.moveset .move-desc { display: block; font-size: .72rem; }
+.moveset tr.known td { background: #4cd07a14; }
+.moveset tr.locked td { opacity: .5; }
+.cat { font-size: .68rem; font-weight: 700; padding: 1px 6px; border-radius: 6px; }
+.cat-P { background: #c0392b; } .cat-X { background: #2d5fa8; } .cat-S { background: #6b7280; }
+.move-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.move-chip { border-left: 4px solid var(--tc); background: var(--panel2); border-radius: 8px; padding: 4px 10px; text-align: left; font-size: .85rem; }
+.move-chip small { display: block; color: var(--muted); font-size: .72rem; }
+.modal h4 { margin: 14px 0 6px; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--accent2); text-align: left; }
+.evo-row .admin-btn { margin-left: auto; }
 
 /* Map */
 .map-layout { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start; }
