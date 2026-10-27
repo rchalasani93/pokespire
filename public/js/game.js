@@ -56,6 +56,7 @@ export function newRun(starterId, difficulty = 'medium', mode = 'classic', choic
   starter.fr = 70;
   if (Number.isInteger(choice.nat) && choice.nat >= 0 && choice.nat < 25) starter.nat = choice.nat;
   if (choice.ab && [...DEX[starterId].a, DEX[starterId].h].includes(choice.ab)) starter.ab = choice.ab;
+  if (choice.shiny) starter.shiny = true;
   starter.hp = maxHp(starter);
   const diff = DIFFICULTIES[difficulty] ? difficulty : 'medium';
   const run = {
@@ -64,7 +65,7 @@ export function newRun(starterId, difficulty = 'medium', mode = 'classic', choic
     act: 1, map: generateMap(1), pos: null, visited: [],
     party: [starter], box: [], bag: { ...DIFFICULTIES[diff].bag }, money: 100, fallen: [],
     badges: [], beatenGyms: [], caught: [], league: null, battle: null, node: null,
-    stats: { battles: 0, wins: 0, caught: 0, nodes: 0 },
+    stats: { battles: 0, wins: 0, caught: 0, nodes: 0 }, score: 0,
   };
   return run;
 }
@@ -137,10 +138,13 @@ export function availableNodes(run) {
 }
 
 // ---------- Team building ----------
-function makeTrainerMon(nameOrId, lv, { perfectIvs = 0 } = {}) {
+// Wild shiny odds: 1 in 512 (the games use 1 in 4,096; a run has far fewer encounters)
+export const WILD_SHINY_ODDS = 512;
+
+function makeTrainerMon(nameOrId, lv, { perfectIvs = 0, shinyOdds = 4096 } = {}) {
   const id0 = typeof nameOrId === 'number' ? nameOrId : idOf(nameOrId);
   const id = stageForLevel(id0, lv);
-  const mon = createMon(id, lv, { perfectIvs });
+  const mon = createMon(id, lv, { perfectIvs, shinyOdds });
   mon.fr = 255;
   return mon;
 }
@@ -196,14 +200,14 @@ export function buildEncounter(run, node) {
   switch (node.type) {
     case 'wild': {
       const L = Math.max(2, lv - 1 + rand(3));
-      const mon = makeTrainerMon(pick(regional(run, P.wildBase)), L);
+      const mon = makeTrainerMon(pick(regional(run, P.wildBase)), L, { shinyOdds: WILD_SHINY_ODDS });
       mon.fr = DEX[mon.id].bh;
       return { kind: 'wild', enemy: [mon], canCatch: true, canRun: true, ai: 0 };
     }
     case 'elite': {
       const L = lv + 4;
       const id = pick(regional(run, P.eliteFinal));
-      const mon = createMon(id, L, { perfectIvs: 3 });
+      const mon = createMon(id, L, { perfectIvs: 3, shinyOdds: WILD_SHINY_ODDS });
       mon.elite = true;
       return { kind: 'elite', enemy: [mon], canCatch: true, canRun: true, ai: 1, intro: `A towering Elite ${DEX[mon.id].n} blocks the path!` };
     }
@@ -211,7 +215,7 @@ export function buildEncounter(run, node) {
       const regionLegends = isClassic(run) ? P.legends.filter(x => regionOf(x) === run.region) : [];
       const id = pick(regionLegends.length ? regionLegends : act === 1 ? P.subLegends : P.legends);
       const L = lv + 6;
-      const mon = createMon(id, L, { perfectIvs: 3 });
+      const mon = createMon(id, L, { perfectIvs: 3, shinyOdds: WILD_SHINY_ODDS });
       return { kind: 'legendary', enemy: [mon], canCatch: true, canRun: true, ai: 1, intro: `The Legendary ${DEX[id].n} appeared!` };
     }
     case 'trainer': {

@@ -3,9 +3,11 @@ import { loadData } from './data.js';
 import { setStatusElement } from './api.js';
 import { loadAccount, go } from './ui.js';
 import { initBattleUI } from './battle-ui.js';
+import { initSocialUI } from './social-ui.js';
 
 async function boot() {
   initBattleUI();
+  initSocialUI();
   setStatusElement(document.getElementById('save-status'));
   try {
     await loadData();

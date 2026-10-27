@@ -156,6 +156,8 @@ export function sfx(name) {
     case 'run': [0, 0.08, 0.16].forEach(d => noise(S, { start: t + d, dur: 0.06, vol: 0.15, hp: 2000 })); break;
     case 'coin': [[88, 0], [93, 0.07]].forEach(([n, d]) => tone(S, { freq: midi(n), start: t + d, dur: 0.12, vol: 0.12 })); break;
     case 'evolve': for (let i = 0; i < 12; i++) tone(S, { freq: midi(60 + i * 2), start: t + i * 0.12, dur: 0.12, vol: 0.1, type: 'triangle' }); break;
+    case 'shiny': [[88, 0], [91, 0.08], [96, 0.16], [100, 0.24]].forEach(([n, d]) => tone(S, { freq: midi(n), start: t + d, dur: 0.2, vol: 0.1, type: 'triangle' })); break;
+    case 'achievement': [[72, 0], [76, 0.1], [79, 0.2], [84, 0.3], [88, 0.45]].forEach(([n, d]) => tone(S, { freq: midi(n), start: t + d, dur: 0.22, vol: 0.12, type: 'square' })); break;
     case 'error': tone(S, { freq: 150, start: t, dur: 0.2, type: 'square', vol: 0.15 }); break;
   }
 }

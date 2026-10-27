@@ -1,6 +1,6 @@
 // Screens, overlays and player flows (everything except the battle screen).
 import { S, defaultProfile, normalizeProfile } from './state.js';
-import { api, configured, saveRun, saveProfile, flushSaves, cancelRunSave } from './api.js';
+import { api, configured, saveRun, saveProfile, flushSaves, cancelRunSave, joinPresence, leavePresence } from './api.js';
 import { DEX, MOVES, REGIONS, ABILITIES, regionOf, familyRoot, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS } from './data.js';
 import {
   createMon, calcStats, maxHp, monName, NATURES, STAT_LABELS, STAT_SHORT, natureMod, natureLabel, ivJudge, expForLevel, gainExp, levelUp, evoItemFor,
@@ -13,7 +13,9 @@ import {
 import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl } from './content.js';
 import { startBattle, applyItem } from './battle.js';
 import { renderBattle, beginBattle, onBattleAction, resumeBattleUI } from './battle-ui.js';
+import { dexEntryHtml } from './social-ui.js';
 import { playMusic, sfx, playCry, applyAudioSettings, unlockAudio } from './audio.js';
+import { track, addRunPoints, battleWon, caughtEvents, checkAchievements, setProgressHooks, POINTS } from './progress.js';
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const app = () => document.getElementById('app');
@@ -33,7 +35,30 @@ export function render() {
   document.getElementById('topbar-user').innerHTML = S.user
     ? `<span>${esc(S.user.username)}</span>${S.run && S.screen !== 'menu' ? ` · <span class="money">$${S.run.money.toLocaleString()}</span>` : ''}`
     : '';
+  renderOnline();
   afterRender();
+}
+
+export function renderOnline() {
+  let el = document.getElementById('online-count');
+  if (!S.user) { el?.remove(); return; }
+  if (!el) {
+    el = document.createElement('button');
+    el.id = 'online-count';
+    el.className = 'online-count';
+    el.dataset.act = 'openFriends';
+    document.body.appendChild(el);
+  }
+  const n = (S.online || []).length || 1;
+  el.innerHTML = `<i></i>${n.toLocaleString()} online`;
+  el.title = 'Players online now';
+}
+
+export function refreshMissionCount() {
+  import('./progress.js').then(({ missionList }) => {
+    const { daily, weekly } = missionList();
+    S.missionsReady = [...daily, ...weekly].filter(m => m.done && !m.claimed).length;
+  });
 }
 function afterRender() {
   if (S.refocus) {
@@ -74,6 +99,11 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   const el = e.target.closest('[data-input]');
   if (el) ACTIONS[el.dataset.input]?.(el.value, el);
+});
+
+setProgressHooks({
+  onUnlock: a => { sfx('achievement'); toast(`🏆 Achievement unlocked: ${a.name} (+${a.pts} pts)`); },
+  onChange: () => { persistProfile(); refreshMissionCount(); },
 });
 
 // ---------- Shared bits ----------
@@ -182,6 +212,9 @@ export async function loadAccount() {
     let changed = false;
     for (const m of [...(S.run?.party || []), ...(S.run?.box || [])]) if (m.ball && recordCatch(m)) changed = true;
     if (isNew || changed) persistProfile();
+    S.scores = await api.scores().catch(() => null);
+    joinPresence(S.user, ids => { S.online = ids; renderOnline(); });
+    refreshMissionCount();
     go('menu');
   } catch (e) {
     S.user = null;
@@ -196,27 +229,43 @@ SCREENS.setup = () => `<section class="panel narrow">
 </section>`;
 
 // ---------- Main menu ----------
+export function pokedexCount() {
+  return S.user?.isAdmin && S.profile.settings.allStarters ? Object.keys(DEX).length : new Set(S.profile.caught).size;
+}
+
 SCREENS.menu = () => {
   playMusic('menu');
   const r = S.run;
+  const sc = S.scores || { best_score: 0, total_score: 0 };
   return `<section class="menu">
-    <div class="hero small">${img(artUrl(r ? r.party[0].id : 6), 'hero-art', '')}
+    <div class="hero small">${img(artUrl(r ? r.party[0].id : 6, r?.party[0].shiny), 'hero-art', '')}
       <h1>PokéSpire</h1><p class="muted">Welcome back, ${esc(S.user.username)}.</p></div>
     <div class="menu-buttons">
-      ${r ? `<button class="primary big" data-act="continueRun">Continue run<small>${GAME_MODES[modeOf(r)].name} · ${diffOf(r).name} · ${ACTS[r.act - 1].name} · ${r.badges.length} badge${r.badges.length === 1 ? '' : 's'}</small></button>` : ''}
-      <button class="${r ? '' : 'primary'} big" data-act="play">${r ? 'New run' : 'Play'}<small>Choose a starter and begin</small></button>
-      <button class="big" data-act="openSettings">Settings<small>Sound and text speed</small></button>
-      <button class="big" data-act="openHistory">History<small>Previous runs and Hall of Fame</small></button>
+      ${r ? `<button class="primary big" data-act="continueRun">Continue run<small>${GAME_MODES[modeOf(r)].name} · ${diffOf(r).name} · ${ACTS[r.act - 1].name} · ${(r.score || 0).toLocaleString()} pts</small></button>` : ''}
+      <button class="${r ? '' : 'primary'} big" data-act="play">${r ? 'New run' : 'Play'}<small>Choose a mode, difficulty and starter</small></button>
+      <div class="menu-grid">
+        <button data-act="openPokedex">Pokédex<small>${pokedexCount().toLocaleString()} / ${Object.keys(DEX).length.toLocaleString()} caught</small></button>
+        <button data-act="openMissions">Missions${missionBadge()}<small>Daily, weekly and achievements</small></button>
+        <button data-act="openLeaderboard">Leaderboard<small>Top scores</small></button>
+        <button data-act="openFriends">Friends<small>Find and add players</small></button>
+        <button data-act="openHistory">History<small>Runs and Hall of Fame</small></button>
+        <button data-act="openSettings">Settings<small>Sound and text speed</small></button>
+      </div>
       ${S.user.isAdmin ? '<button class="big admin-btn" data-act="openAdmin">Admin panel<small>God mode and debug tools</small></button>' : ''}
       <button class="ghost" data-act="logout">Log out</button>
     </div>
-    <div class="stat-row">
+    <div class="stat-row four">
       <div><b>${S.profile.stats.runs}</b><span>Runs</span></div>
+      <div><b>${(sc.best_score || 0).toLocaleString()}</b><span>Best score</span></div>
+      <div><b>${Number(sc.total_score || 0).toLocaleString()}</b><span>Total points</span></div>
       <div><b>${S.profile.stats.champions}</b><span>Hall of Fame</span></div>
-      <div><b>${S.profile.caught.length}</b><span>Species caught</span></div>
     </div>
   </section>`;
 };
+function missionBadge() {
+  const n = S.missionsReady || 0;
+  return n ? ` <span class="count-badge">${n}</span>` : '';
+}
 
 registerActions({
   play: () => {
@@ -233,6 +282,8 @@ registerActions({
   },
   logout: async () => {
     await flushSaves();
+    await leavePresence();
+    S.online = [];
     await api.logout().catch(() => {});
     S.user = null; S.run = null; S.profile = null;
     go('auth', { mode: 'login' });
@@ -282,8 +333,8 @@ SCREENS.history = () => {
   const teamStrip = team => `<div class="team-strip">${(team || []).map(m => `<span title="${esc(m.name)} Lv ${m.lv}">${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', m.name)}<small>Lv ${m.lv}</small></span>`).join('')}</div>`;
   const runs = S.ui.loading ? '<p class="muted">Loading…</p>' : list.length ? list.map(h => `
     <article class="history-item ${h.result === 'Champion' ? 'win' : h.result === 'Defeated' ? 'loss' : ''}">
-      <div class="row"><strong>${esc(h.result)} ${h.mode ? modeBadge(h.mode) : ''} ${diffBadge(DIFFICULTIES[h.difficulty] ? h.difficulty : 'medium')}${h.god ? ' <span class="diff-badge" style="--dc:#ffd700;color:#1a1a1a">God mode</span>' : ''}</strong><span class="muted">${new Date(h.createdAt).toLocaleString()}</span></div>
-      <p class="muted small">Starter: ${esc(DEX[h.starter]?.n || '?')} · Reached ${esc(h.reached || '')} · ${h.badges ?? 0} badges · ${h.caught ?? 0} caught · ${h.wins ?? 0} battles won${h.durationMin != null ? ` · ${h.durationMin} min` : ''}${h.defeatedBy ? ` · Lost to ${esc(h.defeatedBy)}` : ''}</p>
+      <div class="row"><strong>${esc(h.result)} ${h.mode ? modeBadge(h.mode) : ''} ${diffBadge(DIFFICULTIES[h.difficulty] ? h.difficulty : 'medium')}${h.god ? ' <span class="diff-badge" style="--dc:#ffd700;color:#1a1a1a">Admin tools used</span>' : ''}</strong><span class="muted">${new Date(h.createdAt).toLocaleString()}</span></div>
+      <p class="muted small"><b class="score-text">${(h.score || 0).toLocaleString()} pts</b> · Starter: ${esc(DEX[h.starter]?.n || '?')} · Reached ${esc(h.reached || '')} · ${h.badges ?? 0} badges · ${h.caught ?? 0} caught · ${h.wins ?? 0} battles won${h.durationMin != null ? ` · ${h.durationMin} min` : ''}${h.defeatedBy ? ` · Lost to ${esc(h.defeatedBy)}` : ''}</p>
       ${teamStrip(h.team)}
     </article>`).join('') : '<p class="muted">No finished runs yet. Your completed, lost and abandoned runs will appear here.</p>';
   const hof = S.profile.hallOfFame.length ? S.profile.hallOfFame.slice().reverse().map((h, i) => `
@@ -320,6 +371,8 @@ SCREENS.mode = () => {
 registerActions({
   starterNature: v => { S.modal.nat = v === '' ? undefined : +v; },
   starterAbility: v => { S.modal.ab = v || undefined; },
+  starterShiny: (_, el) => { S.modal.shiny = el.checked; render(); },
+  dexShinyToggle: (_, el) => { S.ui.dexShiny = el.checked; render(); },
 });
 registerActions({ pickMode: key => go('difficulty', { mode: key }) });
 
@@ -343,18 +396,18 @@ registerActions({
 });
 
 // ---------- Filtering & sorting ----------
-const SPECIES_SORTS = [['dex', 'Dex No.'], ['name', 'Name'], ['bst', 'Base stat total'], ['hp', 'Base HP'], ['atk', 'Base Attack'], ['def', 'Base Defense'], ['spa', 'Base Sp. Atk'], ['spd', 'Base Sp. Def'], ['spe', 'Base Speed']];
+export const SPECIES_SORTS = [['dex', 'Dex No.'], ['name', 'Name'], ['bst', 'Base stat total'], ['hp', 'Base HP'], ['atk', 'Base Attack'], ['def', 'Base Defense'], ['spa', 'Base Sp. Atk'], ['spd', 'Base Sp. Def'], ['spe', 'Base Speed']];
 const MON_SORTS = [['order', 'Default order'], ['dex', 'Dex No.'], ['name', 'Name'], ['level', 'Level'], ['hpPct', 'HP remaining'], ['bst', 'Base stat total'],
   ['hp', 'HP'], ['atk', 'Attack'], ['def', 'Defense'], ['spa', 'Sp. Atk'], ['spd', 'Sp. Def'], ['spe', 'Speed'], ['ivs', 'IV total'], ['evs', 'EV total']];
-const STAT_IDX = { hp: 0, atk: 1, def: 2, spa: 3, spd: 4, spe: 5 };
+export const STAT_IDX = { hp: 0, atk: 1, def: 2, spa: 3, spd: 4, spe: 5 };
 const TYPE_LIST = Object.keys(TYPE_COLORS);
 
-function filterState(ctx) {
+export function filterState(ctx) {
   S.filters ||= {};
   return (S.filters[ctx] ||= { q: '', type: '', region: '', sort: ctx === 'starters' ? 'dex' : 'order', dir: 'asc' });
 }
 
-function filterBar(ctx, { species = false, region = true } = {}) {
+export function filterBar(ctx, { species = false, region = true } = {}) {
   const f = filterState(ctx);
   const sorts = species ? SPECIES_SORTS : MON_SORTS;
   return `<div class="filter-bar">
@@ -375,7 +428,7 @@ function matches(f, id, name) {
   return true;
 }
 
-function sortSpecies(ids, f) {
+export function sortSpecies(ids, f) {
   const key = id => f.sort === 'name' ? DEX[id].n : f.sort === 'bst' ? bst(id) : f.sort in STAT_IDX ? DEX[id].b[STAT_IDX[f.sort]] : id;
   return ids.filter(id => matches(f, id, DEX[id].n)).sort((a, b) => cmp(key(a), key(b), f.dir) || a - b);
 }
@@ -452,9 +505,10 @@ registerActions({
   confirmStarter: async id => {
     const difficulty = S.modal?.difficulty || 'medium';
     const mode = S.modal?.mode || 'classic';
-    const choice = { nat: S.modal?.nat, ab: S.modal?.ab };
+    const choice = { nat: S.modal?.nat, ab: S.modal?.ab, shiny: S.modal?.shiny && unlockedFor(+id).shiny };
     S.modal = null;
     S.run = newRun(+id, difficulty, mode, choice);
+    track('runStart');
     S.profile.stats.runs++;
     persistProfile();
     playCry(+id);
@@ -513,6 +567,7 @@ function sidePanel() {
   return `<aside class="panel side">
     ${run.god ? '<div class="god-banner">⚡ God mode is on</div>' : ''}
     <div class="wallet"><span>Money</span><b>$${run.money.toLocaleString()}</b></div>
+    <div class="wallet"><span>Score</span><b>${(run.score || 0).toLocaleString()} pts</b></div>
     <h3>Team <small class="muted">${run.party.length}/6 · Box ${run.box.length}</small></h3>
     <div class="party-list">${run.party.map((m, i) => monCard(m, i)).join('')}</div>
     <div class="row gap wrap"><button data-act="openBag">Bag</button><button data-act="openTeam">Team</button><button data-act="openBox">Box</button></div>
@@ -619,6 +674,7 @@ registerActions({
     if (n.spun) return;
     n.result = spinPokeStop(S.run);
     n.spun = true;
+    track('stop');
     sfx('coin');
     persistRun();
     render();
@@ -685,11 +741,12 @@ function renderModal() {
   } else if (m.type === 'confirmStarter') {
     const sp = DEX[m.id];
     const un = unlockedFor(m.id);
-    const pickers = (un.natures.length || un.abilities.length) ? `<div class="starter-pickers">
+    const pickers = (un.natures.length || un.abilities.length || un.shiny) ? `<div class="starter-pickers">
+        ${un.shiny ? `<label class="check shiny-pick"><input type="checkbox" class="silent" data-act="starterShiny" ${m.shiny ? 'checked' : ''}> <span class="shiny-mark">✦</span> Shiny</label>` : ''}
         ${un.natures.length ? `<label>Nature<select data-input="starterNature"><option value="">Random</option>${un.natures.map(n => `<option value="${n}" ${m.nat === n ? 'selected' : ''}>${esc(natureLabel(n))}</option>`).join('')}</select></label>` : ''}
         ${un.abilities.length ? `<label>Ability<select data-input="starterAbility"><option value="">Random</option>${un.abilities.map(a => `<option ${m.ab === a ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>` : ''}
       </div>` : '';
-    body = `<div class="center-text">${img(artUrl(m.id), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
+    body = `<div class="center-text">${img(artUrl(m.id, m.shiny), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
       <div class="abilities-preview">${[...sp.a.map(a => abilityInfo(a, false)), sp.h ? abilityInfo(sp.h, true) : ''].join('')}</div>
       ${pickers}
       <p class="muted">Start a ${GAME_MODES[m.mode].name} · ${DIFFICULTIES[m.difficulty].name} run with ${sp.n}?${m.mode === 'classic' ? ` You'll journey through ${REGIONS[regionOf(m.id)].name}.` : ''}</p></div>
@@ -707,6 +764,8 @@ function renderModal() {
     body = m.picker ? pickerHtml(m) : summaryHtml(summaryMon(m), m.index, m.src || 'party');
   } else if (m.type === 'bag') {
     body = bagHtml(m.pocket);
+  } else if (m.type === 'dexEntry') {
+    body = dexEntryHtml(m.id);
   } else if (m.type === 'admin') {
     body = adminHtml();
   } else if (m.type === 'bagTarget') {
@@ -737,7 +796,7 @@ function sortExtra(m, ctx) {
 
 function summaryMon(m) { return (m.src === 'box' ? S.run.box : S.run.party)[m.index]; }
 
-function abilityInfo(name, hidden) {
+export function abilityInfo(name, hidden) {
   return `<div class="ability"><strong>${esc(name)}</strong>${hidden ? ' <span class="tag-hidden">Hidden</span>' : ''}<p class="small muted">${esc(ABILITIES[name] || 'No description available.')}</p></div>`;
 }
 
@@ -752,8 +811,8 @@ function summaryHtml(mon, index, src = 'party') {
   const abilities = unlockedAbilitySlots(mon).filter(a => a !== mon.ab);
   return `<div class="summary">
     <div class="summary-head">
-      ${img(artUrl(mon.id), 'summary-art', sp.n)}
-      <div><h2>${esc(monName(mon))}${mon.shiny ? ' ✦' : ''} <small>Lv ${mon.lv}</small></h2>
+      ${img(artUrl(mon.id, mon.shiny), 'summary-art', sp.n)}
+      <div><h2>${esc(monName(mon))}${mon.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} <small>Lv ${mon.lv}</small></h2>
         <div>${sp.t.map(typeBadge).join('')} ${statusTag(mon.st)}</div>
         <p class="small">#${mon.id} · Friendship ${mon.fr} · ${mon.lv < 100 ? `${(next - mon.exp).toLocaleString()} Exp. to Lv ${mon.lv + 1}` : 'Max level'}${mon.ball ? ` · Caught in a ${esc(mon.ball)}` : ''}</p>
         <div class="expbar"><i style="width:${pct}%"></i></div>
@@ -803,7 +862,7 @@ export function moveRow(id, pp) {
   </div>`;
 }
 
-function evolutionSection(mon) {
+export function evolutionSection(mon) {
   const sp = DEX[mon.id];
   const run = S.run;
   const from = sp.p ? `<p class="small muted">Evolves from ${esc(DEX[sp.p].n)}.</p>` : '';
@@ -853,6 +912,9 @@ export function recordCatch(mon) {
   if (!e.n.includes(mon.nat)) { e.n.push(mon.nat); changed = true; }
   const slot = abilitySlot(mon.id, mon.ab);
   if (slot && !e.a.includes(slot)) { e.a.push(slot); changed = true; }
+  if (mon.shiny && !e.s) { e.s = true; changed = true; }
+  S.profile.shinies ||= [];
+  if (mon.shiny && !S.profile.shinies.includes(mon.id)) { S.profile.shinies.push(mon.id); changed = true; }
   return changed;
 }
 function unlockedNatures(mon) { return [...(dexEntry(mon.id)?.n || [])].sort((a, b) => a - b); }
@@ -862,10 +924,10 @@ function unlockedAbilitySlots(mon) {
   const names = (dexEntry(mon.id)?.a || []).map(slot => slot === 'H' ? sp.h : sp.a[+slot] || sp.a[0]).filter(Boolean);
   return [...new Set(names)];
 }
-function unlockedFor(id) {
+export function unlockedFor(id) {
   const e = S.profile.dex?.[familyRoot(id)] || { n: [], a: [] };
   const sp = DEX[id];
-  return { natures: [...e.n].sort((a, b) => a - b), abilities: [...new Set(e.a.map(slot => slot === 'H' ? sp.h : sp.a[+slot] || sp.a[0]).filter(Boolean))] };
+  return { natures: [...e.n].sort((a, b) => a - b), abilities: [...new Set(e.a.map(slot => slot === 'H' ? sp.h : sp.a[+slot] || sp.a[0]).filter(Boolean))], shiny: !!e.s };
 }
 
 registerActions({
@@ -968,6 +1030,7 @@ function adminHtml() {
       <button data-act="adminMoney">+$10,000</button>
       <button data-act="adminItems">99 of every item</button>
       <button data-act="adminHeal">Heal team</button>
+      <button data-act="adminShiny">Make team shiny</button>
       <button data-act="adminLevels" data-arg="10">Team +10 levels</button>
       <button data-act="adminLevels" data-arg="100">Team to Lv 100</button>
       ${inBattle ? '' : `<button data-act="adminSkip" data-arg="2">Skip to Act II</button>
@@ -980,7 +1043,7 @@ function adminHtml() {
       <button class="primary" type="submit">Add</button>
     </form>
     <datalist id="species-list">${Object.values(DEX).map(sp => `<option value="${esc(sp.n)}">`).join('')}</datalist>
-    <p class="muted small">Runs where God mode was turned on are tagged "God mode" in your history.</p>` : '<p class="muted">Start or continue a run to use God mode and the run tools.</p>';
+    <p class="muted small">Using God mode or any tool above marks the run as "Admin tools used": it scores 0 points and doesn't count toward missions or achievements.</p>` : '<p class="muted">Start or continue a run to use God mode and the run tools.</p>';
   return `<h2>Admin panel</h2>
     ${runTools}
     <h3>Account</h3>
@@ -1007,14 +1070,17 @@ registerActions({
     toast(el.checked ? 'God mode on' : 'God mode off');
     persistRun(); render();
   }),
-  adminMoney: adminOnly(() => { S.run.money += 10000; sfx('coin'); persistRun(); render(); }),
-  adminItems: adminOnly(() => { for (const name of Object.keys(ITEMS)) S.run.bag[name] = 99; sfx('coin'); toast('Bag filled'); persistRun(); render(); }),
-  adminHeal: adminOnly(() => { S.run.party.forEach(healPartyMon); sfx('heal'); persistRun(); render(); }),
+  adminMoney: adminOnly(() => { S.run.godUsed = true; S.run.money += 10000; sfx('coin'); persistRun(); render(); }),
+  adminItems: adminOnly(() => { S.run.godUsed = true; for (const name of Object.keys(ITEMS)) S.run.bag[name] = 99; sfx('coin'); toast('Bag filled'); persistRun(); render(); }),
+  adminShiny: adminOnly(() => { S.run.godUsed = true; S.run.party.forEach(m => { m.shiny = true; }); sfx('shiny'); persistRun(); render(); }),
+  adminHeal: adminOnly(() => { S.run.godUsed = true; S.run.party.forEach(healPartyMon); sfx('heal'); persistRun(); render(); }),
   adminLevels: adminOnly(arg => {
+    S.run.godUsed = true;
     for (const m of S.run.party) { setLevel(m, arg === '100' ? 100 : m.lv + 10); m.hp = maxHp(m); }
     sfx('levelup'); toast('Team leveled up'); persistRun(); render();
   }),
   adminSkip: adminOnly(arg => {
+    S.run.godUsed = true;
     const run = S.run;
     run.act = arg === 'league' ? 3 : +arg;
     run.map = generateMap(run.act);
@@ -1026,6 +1092,7 @@ registerActions({
     S.modal = null; persistRun(); go('map');
   }),
   adminAddMon: adminOnly(fd => {
+    S.run.godUsed = true;
     const name = String(fd.get('species') || '').trim().toLowerCase();
     const sp = Object.values(DEX).find(x => x.n.toLowerCase() === name);
     if (!sp) { toast('No Pokémon with that name'); return; }
@@ -1118,6 +1185,8 @@ registerActions({
     step.from = mon.id;
     const events = evolve(mon, step.to);
     step.done = true;
+    track('evolve');
+    addRunPoints(POINTS.evolve);
     playCry(step.to);
     sfx('levelup');
     const extra = [];
@@ -1174,12 +1243,24 @@ export function finishBattle() {
     }
   }
 
+  // Points, missions and achievements
+  if (result === 'win') { const pts = battleWon(b.kind, b.enemy); if (pts) steps.push({ type: 'msg', text: `+${pts.toLocaleString()} points!` }); }
+  if (result === 'caught') {
+    let pts = caughtEvents(b.caughtMon);
+    if (b.kind === 'elite' || b.kind === 'legendary') pts += battleWon(b.kind, b.enemy);
+    if (pts) steps.push({ type: 'msg', text: `+${pts.toLocaleString()} points!` });
+  }
+  if (run.money > (b.moneyStart ?? run.money)) track('money', run.money - b.moneyStart);
+  for (const m of run.party) if (m.lv >= 100 && !m.l100) { m.l100 = true; track('level100'); }
+  checkAchievements();
+
   if (result === 'caught') {
     const mon = b.caughtMon;
     const where = storeCaught(run, mon);
     const n0 = unlockedFor(mon.id);
     if (recordCatch(mon)) {
       const newNat = !n0.natures.includes(mon.nat), newAb = !n0.abilities.includes(mon.ab);
+      if (mon.shiny && !n0.shiny) steps.push({ type: 'msg', text: `✨ Shiny ${DEX[familyRoot(mon.id)].n} unlocked as a starter option!` });
       if (newNat || newAb) steps.push({ type: 'msg', text: `Unlocked for the ${DEX[familyRoot(mon.id)].n} family: ${[newNat && NATURES[mon.nat] + ' nature', newAb && mon.ab + ' ability'].filter(Boolean).join(' and ')}.` });
     }
     if (where === 'box') steps.push({ type: 'msg', text: `${monName(mon)} was sent to the Box.` });
@@ -1210,7 +1291,12 @@ export function finishBattle() {
       steps.push({ type: 'msg', text: `You received the ${b.trainer.badge} from ${b.trainer.leader}!` });
     }
     const isActBoss = run.map.nodes[run.pos]?.type === 'boss';
-    if (isActBoss && (b.kind === 'gym' || b.kind === 'villainBoss')) then = 'actDone';
+    if (isActBoss && (b.kind === 'gym' || b.kind === 'villainBoss')) {
+      then = 'actDone';
+      track('actClear');
+      const pts = addRunPoints(POINTS.actClear);
+      if (pts) steps.push({ type: 'msg', text: `Act cleared! +${pts.toLocaleString()} points!` });
+    }
     if (b.kind === 'e4') { run.league.stage++; then = 'league'; }
     if (b.kind === 'champion') { run.league.stage++; then = 'hallOfFame'; }
   }
@@ -1281,8 +1367,14 @@ SCREENS.hallOfFame = () => {
 registerActions({
   enterHall: async () => {
     const run = S.run;
-    S.profile.hallOfFame.push({ date: new Date().toISOString(), champion: run.league.champion.split('|')[0], team: partySummary(run.party), starter: run.starter });
+    addRunPoints(POINTS.hallOfFame);
+    S.profile.hallOfFame.push({ date: new Date().toISOString(), champion: run.league.champion.split('|')[0], team: partySummary(run.party), starter: run.starter, score: run.score || 0, difficulty: run.difficulty, mode: modeOf(run) });
     S.profile.stats.champions++;
+    if (!run.god) {
+      if (modeOf(run) === 'classic') { S.profile.classicWins ||= []; if (!S.profile.classicWins.includes(runRegion(run))) S.profile.classicWins.push(runRegion(run)); }
+      track('hallOfFame');
+      track('hallOfFame:' + (run.difficulty || 'medium'));
+    }
     persistProfile();
     await endRun('Champion');
     go('menu');
@@ -1307,7 +1399,7 @@ export async function endRun(result, defeatedBy = null) {
   cancelRunSave();
   const reached = run.league ? (run.league.stage >= 5 ? 'Hall of Fame' : run.league.stage === 4 ? 'Champion' : `Elite Four ${run.league.stage + 1}`) : `Act ${run.act}, floor ${run.pos ? run.map.nodes[run.pos].r + 1 : 0}`;
   const entry = {
-    result, difficulty: run.difficulty || 'medium', mode: modeOf(run), god: !!run.godUsed, starter: run.starter, act: run.act, reached, badges: run.badges.length,
+    result, difficulty: run.difficulty || 'medium', mode: modeOf(run), god: !!run.godUsed, score: run.godUsed ? 0 : (run.score || 0), starter: run.starter, act: run.act, reached, badges: run.badges.length,
     caught: run.stats.caught, wins: run.stats.wins, team: partySummary(run.party),
     startedAt: run.startedAt, durationMin: Math.round((Date.now() - new Date(run.startedAt).getTime()) / 60000),
     ...(defeatedBy ? { defeatedBy } : {}),
@@ -1315,6 +1407,7 @@ export async function endRun(result, defeatedBy = null) {
   S.run = null;
   S.history = null;
   try { await api.addHistory(entry); } catch { toast('Could not save this run to history.'); }
+  S.scores = await api.scores().catch(() => S.scores);
 }
 
 export function resumeRun() {

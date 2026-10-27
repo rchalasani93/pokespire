@@ -193,6 +193,32 @@ assert.equal(crashes, 0, 'battle engine crashed');
   assert.equal(M.ivJudge(31), 'Best');
 }
 
+// Points, missions and achievements
+{
+  const { S } = await import('../public/js/state.js');
+  const P = await import('../public/js/progress.js');
+  const { normalizeProfile } = await import('../public/js/state.js');
+  S.profile = normalizeProfile(null);
+  S.run = G.newRun(4, 'hard', 'classic');
+  const pts = P.battleWon('gym', [M.createMon(74, 14)]);
+  assert.equal(pts, Math.round((P.POINTS.gym + 14) * 1.5), 'gym win points ×1.5 on Hard');
+  assert.equal(S.run.score, pts);
+  const m1 = P.currentMissions(), m2 = P.currentMissions();
+  assert.deepEqual(m1.daily.map(m => m.id), m2.daily.map(m => m.id), 'missions are stable for the day');
+  assert.equal(m1.daily.length, 3); assert.equal(m1.weekly.length, 3);
+  const winMission = [...m1.daily, ...m1.weekly].find(m => m.ev === 'win');
+  P.track('win', 100);
+  if (winMission) assert.ok(P.missionList()[m1.daily.includes(winMission) ? 'daily' : 'weekly'].find(m => m.id === winMission.id).done);
+  S.profile.caught = [1];
+  P.track('catch');
+  assert.ok(S.profile.achievements.first_catch, 'First Catch unlocks');
+  S.run.god = true;
+  const before = S.run.score;
+  assert.equal(P.battleWon('champion', [M.createMon(6, 60)]), 0, 'no points in God mode');
+  assert.equal(S.run.score, before);
+  S.run = null; S.profile = null;
+}
+
 // League setup
 const run = G.newRun(1); run.act = 3; G.startLeague(run);
 assert.equal(run.league.members.length, 4);

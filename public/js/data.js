@@ -47,7 +47,7 @@ export function idOf(name) {
 const SPRITES = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites';
 export const spriteUrl = (id, { back = false, shiny = false } = {}) =>
   `${SPRITES}/pokemon/${back ? 'back/' : ''}${shiny ? 'shiny/' : ''}${id}.png`;
-export const artUrl = id => `${SPRITES}/pokemon/other/official-artwork/${id}.png`;
+export const artUrl = (id, shiny = false) => `${SPRITES}/pokemon/other/official-artwork/${shiny ? 'shiny/' : ''}${id}.png`;
 export const itemIconUrl = slug => `${SPRITES}/items/${slug}.png`;
 export const cryUrl = id => `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${id}.ogg`;
 

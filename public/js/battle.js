@@ -26,7 +26,7 @@ export function startBattle(run, spec) {
     ai: spec.ai ?? (spec.trainer ? 1 : 0), fullRestores: spec.fullRestores || 0,
     pv: freshVolatile(), ev: freshVolatile(), participants: [run.party[pi].uid],
     turn: 0, runAttempts: 0, over: null, phase: 'choose', learnQueue: [], leveled: [], log: [],
-    caughtMon: null, exp: {}, noItems: !!spec.noItems, wildPrize: spec.wildPrize || 0,
+    caughtMon: null, exp: {}, moneyStart: run.money, noItems: !!spec.noItems, wildPrize: spec.wildPrize || 0,
   };
   run.battle = b;
   const out = [];
@@ -35,7 +35,8 @@ export function startBattle(run, spec) {
     say(run, out, `${b.trainer.title} ${b.trainer.name} wants to battle!`);
     say(run, out, `${b.trainer.title} ${b.trainer.name} sent out ${monName(E)}!`, { send: 'e' });
   } else {
-    say(run, out, spec.intro || `A wild ${monName(E)} appeared!`, { send: 'e', sfx: 'cry' });
+    say(run, out, spec.intro || `A wild ${monName(E)} appeared!`, { send: 'e', sfx: 'cry', shiny: E.shiny });
+    if (E.shiny) say(run, out, `✨ It's a shiny ${monName(E)}!`, { sfx: 'shiny', shiny: true });
   }
   say(run, out, `Go! ${monName(run.party[pi])}!`, { send: 'p' });
   entryAbility(run, out, 'p');

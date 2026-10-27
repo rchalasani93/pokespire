@@ -74,7 +74,8 @@ export const api = {
 
   async addHistory(entry) {
     const id = await currentUserId();
-    const { error } = await sb.from('history').insert({ user_id: id, result: String(entry.result).slice(0, 40), data: entry });
+    const score = Math.max(0, Math.min(1000000, Math.round(entry.score || 0)));
+    const { error } = await sb.from('history').insert({ user_id: id, result: String(entry.result).slice(0, 40), data: entry, score });
     fail(error);
     await api.deleteRun();
   },
@@ -85,6 +86,62 @@ export const api = {
     fail(error);
   },
 };
+
+// ---------- Social: leaderboard, friends, points ----------
+Object.assign(api, {
+  async leaderboard(kind = 'best') {
+    const { data, error } = await sb.rpc('leaderboard', { kind, lim: 50 });
+    fail(error);
+    return data;
+  },
+  async searchPlayers(q) {
+    const { data, error } = await sb.rpc('search_players', { q });
+    fail(error);
+    return data;
+  },
+  async myFriends() {
+    const { data, error } = await sb.rpc('my_friends');
+    fail(error);
+    return data;
+  },
+  async addFriend(friendId) {
+    const id = await currentUserId();
+    const { error } = await sb.from('friends').insert({ user_id: id, friend_id: friendId });
+    if (error && !/duplicate/i.test(error.message)) fail(error);
+  },
+  async removeFriend(friendId) {
+    const id = await currentUserId();
+    const { error } = await sb.from('friends').delete().eq('user_id', id).eq('friend_id', friendId);
+    fail(error);
+  },
+  async claimPoints(amount) {
+    const { data, error } = await sb.rpc('claim_points', { amount: Math.round(amount) });
+    fail(error);
+    return data;
+  },
+  async scores() {
+    const id = await currentUserId();
+    const { data, error } = await sb.from('profiles').select('best_score, total_score').eq('user_id', id).maybeSingle();
+    fail(error);
+    return data || { best_score: 0, total_score: 0 };
+  },
+});
+
+// ---------- Who's online (Supabase Realtime presence) ----------
+let presence = null;
+export function joinPresence(user, onChange) {
+  if (!sb || presence) return;
+  const ch = sb.channel('online', { config: { presence: { key: user.id } } });
+  presence = ch;
+  const emit = () => { if (presence === ch) onChange(Object.keys(ch.presenceState())); };
+  ch.on('presence', { event: 'sync' }, emit)
+    .subscribe(async status => { if (status === 'SUBSCRIBED' && presence === ch) await ch.track({ username: user.username, at: Date.now() }); });
+}
+export async function leavePresence() {
+  if (!presence) return;
+  const ch = presence; presence = null;
+  try { await ch.untrack(); await sb.removeChannel(ch); } catch { /* ignore */ }
+}
 
 async function putRun(run) {
   const id = await currentUserId();

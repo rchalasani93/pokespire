@@ -33,6 +33,14 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Filter and sort.** The starter screen, Team and Box can be searched by name, filtered by type (and region), and sorted by Dex No., name, level, HP, base stat total, each stat, IV total or EV total.
 
+**Points, leaderboard and friends.** Every win and catch adds points to the run (more for tougher opponents, multiplied by difficulty: Easy ×0.5, Medium ×1, Hard ×1.5, Hell ×2.5). The leaderboard ranks players by best run and by total points. Search players by username to add them as friends; the corner badge shows how many players are online (Supabase Realtime presence), and friends show an online dot.
+
+**Missions and achievements.** Three daily and three weekly missions (the same for everyone each day and week) award bonus points when claimed, and 24 achievements (catching, shinies, Legendaries, badges, the Hall of Fame on each difficulty, a Classic win in every region and more) add points automatically. Runs using God mode or other admin tools score 0 and don't count.
+
+**Shinies.** Wild, Elite and Legendary Pokémon are shiny 1 time in 512, with a sparkle when they appear. Catching a shiny unlocks a shiny starter option for its evolution family.
+
+**Pokédex.** The main menu's Pokédex lists every species you've caught (with shinies marked), by region, with search, type filter and sorting; tick "show uncaught" to browse silhouettes of the rest. Each entry shows base stats, abilities, what you've unlocked for the family, and its evolution line.
+
 **Starters by region.** Your first run offers the three Kanto starters. Every Pokémon you catch, on any run, joins the starter pool for future runs, grouped by its home region (Kanto through Paldea).
 
 **Main-series mechanics:**

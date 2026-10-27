@@ -36,6 +36,7 @@ function playNext() {
   if (!ev.silent) B.text = ev.text;
   if (ev.caught) B.captured = true;
   B.fx = ev.hitSide ? { hit: ev.hitSide } : ev.faint ? { faint: ev.faint } : ev.send ? { send: ev.send } : null;
+  if (ev.shiny) B.fx = { ...(B.fx || {}), sparkle: true };
   if (ev.sfx === 'cry' || ev.send) playCry(ev.view[ev.send || 'e']?.id);
   else if (ev.sfx) sfx(ev.sfx);
   render();
@@ -93,7 +94,7 @@ function battleScreen() {
   const fx = B.fx || {};
   const enemyBalls = b.trainer ? `<div class="team-balls">${b.enemy.map(m => `<i class="${m.hp > 0 ? '' : 'out'}"></i>`).join('')}</div>` : '';
   const scene = `<div class="scene kind-${b.kind}">
-    <div class="wallet-chip">$${run.money.toLocaleString()}</div>
+    <div class="wallet-chip">$${run.money.toLocaleString()} · ${(run.score || 0).toLocaleString()} pts</div>
     ${run.god ? '<div class="god-chip">⚡ GOD</div>' : ''}
     ${b.trainer ? `<img class="trainer-sprite" src="${trainerSpriteUrl(b.trainer.sprite)}" alt="" onerror="this.remove()">` : ''}
     <div class="hud foe">
@@ -102,10 +103,10 @@ function battleScreen() {
       ${E ? hpBar(E.hp, E.max) : ''}
       <div class="row small">${statusTag(E?.st)}${b.enemy[b.ei]?.elite ? '<span class="elite-tag">ELITE</span>' : ''}${enemyBalls}</div>
     </div>
-    <div class="sprite-wrap foe ${fx.hit === 'e' ? 'hit' : ''} ${fx.faint === 'e' || (E && E.hp <= 0) ? 'fainted' : ''} ${B.captured ? 'captured' : ''} ${fx.send === 'e' ? 'sendout' : ''}">
+    <div class="sprite-wrap foe ${fx.hit === 'e' ? 'hit' : ''} ${fx.faint === 'e' || (E && E.hp <= 0) ? 'fainted' : ''} ${B.captured ? 'captured' : ''} ${fx.send === 'e' ? 'sendout' : ''} ${E?.shiny ? 'is-shiny' : ''} ${fx.sparkle ? 'sparkle' : ''}">
       ${E ? `<img src="${spriteUrl(E.id, { shiny: E.shiny })}" alt="${esc(E.name)}">` : ''}
     </div>
-    <div class="sprite-wrap player ${fx.hit === 'p' ? 'hit' : ''} ${fx.faint === 'p' || (P && P.hp <= 0) ? 'fainted' : ''} ${fx.send === 'p' ? 'sendout' : ''}">
+    <div class="sprite-wrap player ${fx.hit === 'p' ? 'hit' : ''} ${fx.faint === 'p' || (P && P.hp <= 0) ? 'fainted' : ''} ${fx.send === 'p' ? 'sendout' : ''} ${P?.shiny ? 'is-shiny' : ''} ${fx.send === 'p' && P?.shiny ? 'sparkle' : ''}">
       ${P ? `<img src="${spriteUrl(P.id, { back: true, shiny: P.shiny })}" alt="${esc(P.name)}" onerror="this.onerror=null;this.classList.add('flip');this.src='${spriteUrl(P.id, { shiny: P.shiny })}'">` : ''}
     </div>
     <div class="hud player">
