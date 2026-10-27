@@ -155,6 +155,7 @@ export const GYM_LEADERS = [
   { name: 'Byron', region: 'Sinnoh', type: 'Steel', sprite: 'byron', badge: 'Mine', team: ['Bronzor', 'Magneton', 'Steelix', 'Bronzong', 'Empoleon', 'Bastiodon'] },
   { name: 'Candice', region: 'Sinnoh', type: 'Ice', sprite: 'candice', badge: 'Icicle', team: ['Snover', 'Sneasel', 'Glaceon', 'Mamoswine', 'Weavile', 'Froslass'] },
   { name: 'Volkner', region: 'Sinnoh', type: 'Electric', sprite: 'volkner', badge: 'Beacon', team: ['Shinx', 'Raichu', 'Jolteon', 'Ambipom', 'Electivire', 'Luxray'] },
+  { name: 'Cilan', region: 'Unova', type: 'Grass', sprite: 'cilan', badge: 'Trio', team: ['Lillipup', 'Pansage', 'Pansage', 'Simisage', 'Simisage', 'Simisage'] },
   { name: 'Lenora', region: 'Unova', type: 'Normal', sprite: 'lenora', badge: 'Basic', team: ['Lillipup', 'Watchog', 'Herdier', 'Cinccino', 'Bouffalant', 'Stoutland'] },
   { name: 'Burgh', region: 'Unova', type: 'Bug', sprite: 'burgh', badge: 'Insect', team: ['Sewaddle', 'Whirlipede', 'Crustle', 'Escavalier', 'Scolipede', 'Leavanny'] },
   { name: 'Elesa', region: 'Unova', type: 'Electric', sprite: 'elesa', badge: 'Bolt', team: ['Emolga', 'Blitzle', 'Joltik', 'Galvantula', 'Eelektross', 'Zebstrika'] },
@@ -171,6 +172,14 @@ export const GYM_LEADERS = [
   { name: 'Valerie', region: 'Kalos', type: 'Fairy', sprite: 'valerie', badge: 'Fairy', team: ['Spritzee', 'Mawile', 'Swirlix', 'Aromatisse', 'Slurpuff', 'Sylveon'] },
   { name: 'Olympia', region: 'Kalos', type: 'Psychic', sprite: 'olympia', badge: 'Psychic', team: ['Espurr', 'Sigilyph', 'Slowking', 'Delphox', 'Gothitelle', 'Meowstic'] },
   { name: 'Wulfric', region: 'Kalos', type: 'Ice', sprite: 'wulfric', badge: 'Iceberg', team: ['Bergmite', 'Snover', 'Cryogonal', 'Abomasnow', 'Mamoswine', 'Avalugg'] },
+  { name: 'Ilima', region: 'Alola', type: 'Normal', title: 'Alola Trial Captain', sprite: 'ilima', badge: 'Normalium Z', team: ['Yungoos', 'Smeargle', 'Gumshoos', 'Smeargle', 'Komala', 'Gumshoos'] },
+  { name: 'Lana', region: 'Alola', type: 'Water', title: 'Alola Trial Captain', sprite: 'lana', badge: 'Waterium Z', team: ['Wishiwashi', 'Dewpider', 'Araquanid', 'Lanturn', 'Cloyster', 'Araquanid'] },
+  { name: 'Kiawe', region: 'Alola', type: 'Fire', title: 'Alola Trial Captain', sprite: 'kiawe', badge: 'Firium Z', team: ['Salandit', 'Marowak', 'Arcanine', 'Turtonator', 'Salazzle', 'Marowak'] },
+  { name: 'Mallow', region: 'Alola', type: 'Grass', title: 'Alola Trial Captain', sprite: 'mallow', badge: 'Grassium Z', team: ['Fomantis', 'Bounsweet', 'Trevenant', 'Shiinotic', 'Lurantis', 'Tsareena'] },
+  { name: 'Sophocles', region: 'Alola', type: 'Electric', title: 'Alola Trial Captain', sprite: 'sophocles', badge: 'Electrium Z', team: ['Charjabug', 'Togedemaru', 'Magnezone', 'Golem', 'Vikavolt', 'Togedemaru'] },
+  { name: 'Acerola', region: 'Alola', type: 'Ghost', title: 'Alola Trial Captain', sprite: 'acerola', badge: 'Ghostium Z', team: ['Sableye', 'Mimikyu', 'Drifblim', 'Dhelmise', 'Froslass', 'Mimikyu'] },
+  { name: 'Mina', region: 'Alola', type: 'Fairy', title: 'Alola Trial Captain', sprite: 'mina', badge: 'Fairium Z', team: ['Klefki', 'Granbull', 'Shiinotic', 'Wigglytuff', 'Ribombee', 'Granbull'] },
+  { name: 'Hapu', region: 'Alola', type: 'Ground', title: 'Alola Island Kahuna', sprite: 'hapu', badge: 'Groundium Z', team: ['Dugtrio', 'Gastrodon', 'Flygon', 'Golurk', 'Mudsdale', 'Mudsdale'] },
   { name: 'Milo', region: 'Galar', type: 'Grass', sprite: 'milo', badge: 'Grass', team: ['Gossifleur', 'Applin', 'Ludicolo', 'Flapple', 'Appletun', 'Eldegoss'] },
   { name: 'Nessa', region: 'Galar', type: 'Water', sprite: 'nessa', badge: 'Water', team: ['Chewtle', 'Arrokuda', 'Pelipper', 'Golisopod', 'Barraskewda', 'Drednaw'] },
   { name: 'Kabu', region: 'Galar', type: 'Fire', sprite: 'kabu', badge: 'Fire', team: ['Sizzlipede', 'Ninetales', 'Arcanine', 'Torkoal', 'Coalossal', 'Centiskorch'] },
@@ -233,6 +242,10 @@ export const ELITE_FOUR = [
   { name: 'Olivia', region: 'Alola', type: 'Rock', sprite: 'olivia', team: ['Relicanth', 'Carbink', 'Golem', 'Probopass', 'Lycanroc'] },
   { name: 'Acerola', region: 'Alola', type: 'Ghost', sprite: 'acerola', team: ['Sableye', 'Drifblim', 'Dhelmise', 'Froslass', 'Palossand'] },
   { name: 'Kahili', region: 'Alola', type: 'Flying', sprite: 'kahili', team: ['Skarmory', 'Crobat', 'Oricorio', 'Mandibuzz', 'Toucannon'] },
+  { name: 'Marnie', region: 'Galar', type: 'Dark', title: 'Champion Cup', sprite: 'marnie', team: ['Liepard', 'Toxicroak', 'Scrafty', 'Morpeko', 'Grimmsnarl'] },
+  { name: 'Hop', region: 'Galar', type: 'Normal', title: 'Champion Cup', sprite: 'hop', team: ['Dubwool', 'Pincurchin', 'Corviknight', 'Snorlax', 'Rillaboom'] },
+  { name: 'Bede', region: 'Galar', type: 'Fairy', title: 'Champion Cup', sprite: 'bede', team: ['Mawile', 'Gothitelle', 'Gardevoir', 'Rapidash', 'Hatterene'] },
+  { name: 'Raihan', region: 'Galar', type: 'Dragon', title: 'Champion Cup', sprite: 'raihan', team: ['Flygon', 'Sandaconda', 'Gigalith', 'Goodra', 'Duraludon'] },
   { name: 'Rika', region: 'Paldea', type: 'Ground', sprite: 'rika', team: ['Whiscash', 'Camerupt', 'Donphan', 'Dugtrio', 'Clodsire'] },
   { name: 'Poppy', region: 'Paldea', type: 'Steel', sprite: 'poppy', team: ['Copperajah', 'Magnezone', 'Bronzong', 'Corviknight', 'Tinkaton'] },
   { name: 'Larry', region: 'Paldea', type: 'Flying', sprite: 'larry-elite', team: ['Tropius', 'Oricorio', 'Altaria', 'Staraptor', 'Flamigo'] },
@@ -256,3 +269,28 @@ export const CHAMPIONS = [
 ];
 
 export const trainerSpriteUrl = name => `https://play.pokemonshowdown.com/sprites/trainers/${name}.png`;
+
+// ---------- Classic mode: each region's own Gym order, villain team, Elite Four and Champion ----------
+export const CLASSIC = {
+  Kanto: { gyms: ['Brock', 'Misty', 'Lt. Surge', 'Erika', 'Koga', 'Sabrina', 'Blaine', 'Giovanni'], villains: ['Team Rocket'], e4: ['Lorelei', 'Bruno', 'Agatha', 'Lance'], champion: 'Blue' },
+  Johto: { gyms: ['Falkner', 'Bugsy', 'Whitney', 'Morty', 'Chuck', 'Jasmine', 'Pryce', 'Clair'], villains: ['Team Rocket'], e4: ['Will', 'Koga', 'Bruno', 'Karen'], champion: 'Lance' },
+  Hoenn: { gyms: ['Roxanne', 'Brawly', 'Wattson', 'Flannery', 'Norman', 'Winona', 'Tate & Liza', 'Wallace'], villains: ['Team Magma', 'Team Aqua'], e4: ['Sidney', 'Phoebe', 'Glacia', 'Drake'], champion: 'Steven' },
+  Sinnoh: { gyms: ['Roark', 'Gardenia', 'Maylene', 'Crasher Wake', 'Fantina', 'Byron', 'Candice', 'Volkner'], villains: ['Team Galactic'], e4: ['Aaron', 'Bertha', 'Flint', 'Lucian'], champion: 'Cynthia' },
+  Unova: { gyms: ['Cilan', 'Lenora', 'Burgh', 'Elesa', 'Clay', 'Skyla', 'Brycen', 'Drayden'], villains: ['Team Plasma'], e4: ['Shauntal', 'Grimsley', 'Caitlin', 'Marshal'], champion: 'Alder' },
+  Kalos: { gyms: ['Viola', 'Grant', 'Korrina', 'Ramos', 'Clemont', 'Valerie', 'Olympia', 'Wulfric'], villains: ['Team Flare'], e4: ['Malva', 'Siebold', 'Wikstrom', 'Drasna'], champion: 'Diantha' },
+  Alola: { gyms: ['Ilima', 'Lana', 'Kiawe', 'Mallow', 'Sophocles', 'Acerola', 'Mina', 'Hapu'], villains: ['Team Skull'], e4: ['Hala', 'Olivia', 'Acerola', 'Kahili'], champion: 'Kukui' },
+  Galar: { gyms: ['Milo', 'Nessa', 'Kabu', 'Bea', 'Opal', 'Gordie', 'Piers', 'Raihan'], villains: ['Team Yell'], e4: ['Marnie', 'Hop', 'Bede', 'Raihan'], champion: 'Leon' },
+  Paldea: { gyms: ['Katy', 'Brassius', 'Iono', 'Kofu', 'Larry', 'Ryme', 'Tulip', 'Grusha'], villains: ['Team Star'], e4: ['Rika', 'Poppy', 'Larry', 'Hassel'], champion: 'Geeta' },
+};
+
+export const GAME_MODES = {
+  classic: {
+    name: 'Classic', color: '#ffcb05',
+    rules: ["Your starter's home region sets the whole journey", "That region's Gym Leaders, in order, with their signature teams", "Its villain team, Elite Four and Champion", 'Wild Pokémon and Trainers use that region\'s Pokédex'],
+  },
+  random: {
+    name: 'Randomized', color: '#b48cff',
+    rules: ['Gym Leaders, villain teams, Elite Four and Champion drawn from every region', 'Every Trainer team, Gym team and boss team is fully randomized', 'Wild Pokémon from all 1,025 species'],
+  },
+};
+export const modeOf = run => (run?.mode === 'classic' ? 'classic' : 'random');

@@ -11,6 +11,10 @@ create table if not exists public.profiles (
 );
 create unique index if not exists profiles_username_lower on public.profiles (lower(username));
 
+-- Admins get the in-game admin panel and God mode. Only the database owner can set this:
+--   update public.profiles set is_admin = true where username = 'YourName';
+alter table public.profiles add column if not exists is_admin boolean not null default false;
+
 -- The in-progress run (one per player)
 create table if not exists public.runs (
   user_id uuid primary key references auth.users (id) on delete cascade,
@@ -49,6 +53,12 @@ create policy "read own history" on public.history
 drop policy if exists "add own history" on public.history;
 create policy "add own history" on public.history
   for insert to authenticated with check ((select auth.uid()) = user_id);
+
+-- Players may only change their own save data, never their username or admin flag
+revoke insert, update, delete on public.profiles from anon, authenticated;
+grant update (data, updated_at) on public.profiles to authenticated;
+revoke all on public.runs from anon;
+revoke all on public.history from anon;
 
 -- Create the profile row (with the chosen username) when an account is created
 create or replace function public.handle_new_user()

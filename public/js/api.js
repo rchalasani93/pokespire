@@ -56,13 +56,13 @@ export const api = {
   async me() {
     const id = await currentUserId();
     const [p, r] = await Promise.all([
-      sb.from('profiles').select('username, data').eq('user_id', id).maybeSingle(),
+      sb.from('profiles').select('username, data, is_admin').eq('user_id', id).maybeSingle(),
       sb.from('runs').select('data').eq('user_id', id).maybeSingle(),
     ]);
     fail(p.error); fail(r.error);
     if (!p.data) throw new ApiError('Profile not found', 401);
     const profile = p.data.data && Object.keys(p.data.data).length ? p.data.data : null;
-    return { user: { id, username: p.data.username }, profile, run: r.data?.data || null };
+    return { user: { id, username: p.data.username, isAdmin: !!p.data.is_admin }, profile, run: r.data?.data || null };
   },
 
   async history() {

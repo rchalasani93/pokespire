@@ -235,7 +235,7 @@ function throwBall(run, out, ball) {
   run.bag[ball]--;
   const E = sideMon(run, 'e');
   say(run, out, `You threw a ${ball}!`, { sfx: 'ball' });
-  const { caught, shakes } = catchAttempt(E, ball, b.turn);
+  const { caught, shakes } = run.god ? { caught: true, shakes: 3 } : catchAttempt(E, ball, b.turn);
   for (let i = 0; i < shakes; i++) say(run, out, '...', { sfx: 'shake' });
   if (caught) {
     E.ball = ball;
@@ -316,6 +316,7 @@ function useMove(run, out, side, moveIdx) {
   const user = sideMon(run, side), target = sideMon(run, oppSide(side));
   const uname = (side === 'e' && !b.trainer ? 'The wild ' : side === 'e' ? 'The foe\'s ' : '') + monName(user);
 
+  if (run.god && side === 'p') { user.st = null; vol.conf = 0; vol.flinch = false; }
   if (vol.recharge) { vol.recharge = false; say(run, out, `${uname} must recharge!`); return; }
 
   // Status that prevents moving
@@ -334,7 +335,7 @@ function useMove(run, out, side, moveIdx) {
     if (vol.conf === 0) say(run, out, `${uname} snapped out of its confusion!`);
     else {
       say(run, out, `${uname} is confused!`);
-      if (Math.random() < 1 / 3) {
+      if (Math.random() < 1 / 3 && !(run.god && side === 'p')) {
         const atk = effStat(user, vol, 'atk'), def = effStat(user, vol, 'def');
         const dmg = Math.floor(Math.floor(Math.floor(2 * user.lv / 5 + 2) * 40 * atk / def) / 50) + 2;
         user.hp = Math.max(0, user.hp - dmg);
@@ -364,6 +365,9 @@ function useMove(run, out, side, moveIdx) {
   }
   if (moveId === 'struggle') say(run, out, `${uname} has no moves left!`);
   say(run, out, `${uname} used ${mv.n}!`, { sfx: 'move', side, mtype: mv.t });
+
+  // God mode (admin): the opponent's moves can't touch your team
+  if (run.god && side === 'e' && !mv.self) { say(run, out, `${monName(target)} is untouchable in God mode!`); return; }
 
   // Protect
   if (mv.protect) {
@@ -396,8 +400,9 @@ function useMove(run, out, side, moveIdx) {
   // Immunities
   const eff = mv === STRUGGLE ? 1 : typeEffect(mv.t, DEX[target.id].t);
   const immune = absorbs(target.ab, mv.t);
-  if (eff === 0 && !mv.dmg) { say(run, out, `It doesn't affect ${tname}...`); return; }
-  if (immune) {
+  const godHit = run.god && side === 'p';
+  if (eff === 0 && !mv.dmg && !godHit) { say(run, out, `It doesn't affect ${tname}...`); return; }
+  if (immune && !godHit) {
     say(run, out, `${monName(target)}'s ${target.ab} made the attack useless!`);
     if (immune === 'heal') target.hp = Math.min(maxHp(target), target.hp + Math.floor(maxHp(target) / 4));
     return;
@@ -413,7 +418,7 @@ function useMove(run, out, side, moveIdx) {
   for (let h = 0; h < hits && target.hp > 0; h++) {
     const r = computeDamage(run, side, mv, eff);
     let dmg = r.dmg;
-    if (target.ab === 'Sturdy' && target.hp === maxHp(target) && dmg >= target.hp) {
+    if (!godHit && target.ab === 'Sturdy' && target.hp === maxHp(target) && dmg >= target.hp) {
       dmg = target.hp - 1;
       say(run, out, `${monName(target)} endured the hit!`);
     }
@@ -474,6 +479,7 @@ function computeDamage(run, side, mv, eff) {
   const b = run.battle;
   const vol = side === 'p' ? b.pv : b.ev, ovol = side === 'p' ? b.ev : b.pv;
   const A = sideMon(run, side), D = sideMon(run, oppSide(side));
+  if (run.god && side === 'p') return { dmg: D.hp, crit: false };
   if (mv.dmg === 'level') return { dmg: A.lv, crit: false };
   if (typeof mv.dmg === 'number') return { dmg: mv.dmg, crit: false };
   if (mv.half) return { dmg: Math.max(1, Math.floor(D.hp / 2)), crit: false };
@@ -585,7 +591,7 @@ function endOfTurn(run, out) {
     const mon = sideMon(run, side);
     const vol = side === 'p' ? b.pv : b.ev;
     vol.protect = false; vol.flinch = false;
-    if (mon.hp <= 0 || !mon.st || mon.ab === 'Magic Guard') continue;
+    if (mon.hp <= 0 || !mon.st || mon.ab === 'Magic Guard' || (run.god && side === 'p')) continue;
     const m = maxHp(mon);
     if (mon.st === 'brn') { mon.hp = Math.max(0, mon.hp - Math.max(1, Math.floor(m / 16))); say(run, out, `${monName(mon)} was hurt by its burn!`); }
     if (mon.st === 'psn') { mon.hp = Math.max(0, mon.hp - Math.max(1, Math.floor(m / 8))); say(run, out, `${monName(mon)} was hurt by poison!`); }

@@ -1,8 +1,8 @@
 // Run structure: three acts of branching map nodes, encounters, rewards and progression.
-import { DEX, MOVES, REGIONS, idOf, movesAtLevel } from './data.js';
+import { DEX, MOVES, REGIONS, idOf, movesAtLevel, regionOf } from './data.js';
 import { createMon, stageForLevel, healMon, rand, pick, uid, maxHp, expForLevel } from './mechanics.js';
 import {
-  ITEMS, DIFFICULTIES, diffOf, TRAINER_CLASSES, TRAINER_NAMES, GYM_LEADERS, VILLAINS, ELITE_FOUR, CHAMPIONS, STONE_LIST, EVO_ITEM_LIST,
+  ITEMS, DIFFICULTIES, diffOf, CLASSIC, GAME_MODES, modeOf, TRAINER_CLASSES, TRAINER_NAMES, GYM_LEADERS, VILLAINS, ELITE_FOUR, CHAMPIONS, STONE_LIST, EVO_ITEM_LIST,
 } from './content.js';
 
 export const ACTS = [
@@ -51,12 +51,13 @@ export function rowLevel(act, row) {
 }
 
 // ---------- New run ----------
-export function newRun(starterId, difficulty = 'medium') {
+export function newRun(starterId, difficulty = 'medium', mode = 'classic') {
   const starter = createMon(starterId, 5);
   starter.fr = 70;
   const diff = DIFFICULTIES[difficulty] ? difficulty : 'medium';
   const run = {
     v: 1, id: uid(), startedAt: new Date().toISOString(), starter: starterId, difficulty: diff,
+    mode: GAME_MODES[mode] ? mode : 'classic', region: regionOf(starterId),
     act: 1, map: generateMap(1), pos: null, visited: [],
     party: [starter], box: [], bag: { ...DIFFICULTIES[diff].bag }, money: 100, fallen: [],
     badges: [], beatenGyms: [], caught: [], league: null, battle: null, node: null,
@@ -147,10 +148,39 @@ function teamFrom(list, size, baseLv, aceBonus, opts = {}) {
   return chosen.map((n, i) => makeTrainerMon(n, Math.min(100, baseLv + (i === chosen.length - 1 ? aceBonus : Math.floor(i / 2))), opts));
 }
 
-function randomOfTypes(types) {
+// ---------- Classic vs Randomized ----------
+const isClassic = run => modeOf(run) === 'classic';
+export const runRegion = run => REGIONS[run.region ?? regionOf(run.starter)].name;
+const classicOf = run => CLASSIC[runRegion(run)];
+
+/** In Classic mode keep only Pokémon from the run's region (falls back to everything if too few). */
+function regional(run, list) {
+  if (!isClassic(run)) return list;
+  const r = run.region ?? regionOf(run.starter);
+  const f = list.filter(id => regionOf(id) === r);
+  return f.length >= 3 ? f : list;
+}
+
+function randomOfTypes(run, types) {
   const p = getPools();
-  const pool = types ? types.flatMap(t => p.byType[t] || []) : p.wildBase;
-  return pick(pool);
+  const pool = types ? regional(run, [...new Set(types.flatMap(t => p.byType[t] || []))]) : [];
+  return pick(pool.length && (!isClassic(run) || pool.some(id => regionOf(id) === run.region)) ? pool : regional(run, p.wildBase));
+}
+
+/** A fully random team for Randomized mode, levels rising to the ace. */
+function randomTeam(size, baseLv, aceBonus, opts = {}) {
+  const base = getPools().wildBase;
+  return Array.from({ length: size }, (_, i) => makeTrainerMon(pick(base), Math.min(100, baseLv + (i === size - 1 ? aceBonus : Math.floor(i / 2))), opts));
+}
+
+/** Signature team in Classic mode, randomized team in Randomized mode. */
+const bossTeam = (run, list, size, baseLv, aceBonus, opts) =>
+  isClassic(run) ? teamFrom(list, size, baseLv, aceBonus, opts) : randomTeam(size, baseLv, aceBonus, opts);
+
+function pickVillain(run) {
+  if (!isClassic(run)) return pick(VILLAINS);
+  const team = pick(classicOf(run).villains);
+  return VILLAINS.find(v => v.team === team);
 }
 
 // ---------- Encounters ----------
@@ -163,19 +193,20 @@ export function buildEncounter(run, node) {
   switch (node.type) {
     case 'wild': {
       const L = Math.max(2, lv - 1 + rand(3));
-      const mon = makeTrainerMon(pick(P.wildBase), L);
+      const mon = makeTrainerMon(pick(regional(run, P.wildBase)), L);
       mon.fr = DEX[mon.id].bh;
       return { kind: 'wild', enemy: [mon], canCatch: true, canRun: true, ai: 0 };
     }
     case 'elite': {
       const L = lv + 4;
-      const id = pick(P.eliteFinal);
+      const id = pick(regional(run, P.eliteFinal));
       const mon = createMon(id, L, { perfectIvs: 3 });
       mon.elite = true;
       return { kind: 'elite', enemy: [mon], canCatch: true, canRun: true, ai: 1, intro: `A towering Elite ${DEX[mon.id].n} blocks the path!` };
     }
     case 'legendary': {
-      const id = pick(act === 1 ? P.subLegends : P.legends);
+      const regionLegends = isClassic(run) ? P.legends.filter(x => regionOf(x) === run.region) : [];
+      const id = pick(regionLegends.length ? regionLegends : act === 1 ? P.subLegends : P.legends);
       const L = lv + 6;
       const mon = createMon(id, L, { perfectIvs: 3 });
       return { kind: 'legendary', enemy: [mon], canCatch: true, canRun: true, ai: 1, intro: `The Legendary ${DEX[id].n} appeared!` };
@@ -183,7 +214,7 @@ export function buildEncounter(run, node) {
     case 'trainer': {
       const cls = pick(TRAINER_CLASSES.filter(c => c.minAct <= act));
       const size = act === 1 ? teamSize(1, 2) : act === 2 ? teamSize(2, 3) : teamSize(3, 4);
-      const enemy = Array.from({ length: size }, (_, i) => makeTrainerMon(randomOfTypes(cls.types), lv + (i === size - 1 ? 1 : 0)));
+      const enemy = Array.from({ length: size }, (_, i) => makeTrainerMon(randomOfTypes(run, isClassic(run) ? cls.types : null), lv + (i === size - 1 ? 1 : 0)));
       const maxLv = Math.max(...enemy.map(m => m.lv));
       return {
         kind: 'trainer', enemy, ai: act >= 2 ? 2 : 1,
@@ -191,11 +222,12 @@ export function buildEncounter(run, node) {
       };
     }
     case 'villain': {
-      const v = pick(VILLAINS);
+      const v = pickVillain(run);
       const admin = Math.random() < 0.3;
       const size = admin ? teamSize(3, 4) : teamSize(2, 3);
       const L = lv + (admin ? 2 : 1);
-      const enemy = Array.from({ length: size }, () => makeTrainerMon(pick(v.pool), L - rand(2)));
+      const pool = isClassic(run) ? v.pool : getPools().wildBase;
+      const enemy = Array.from({ length: size }, () => makeTrainerMon(pick(pool), L - rand(2)));
       return {
         kind: 'villain', enemy, ai: admin ? 2 : 1,
         trainer: { name: admin ? pick(v.admins) : 'Grunt', title: admin ? `${v.team} Admin` : v.team, sprite: v.grunt, prize: (admin ? 25 : 15) * L, quote: v.quote, team: v.team },
@@ -204,7 +236,7 @@ export function buildEncounter(run, node) {
     case 'gym': {
       const leader = pickGym(run);
       const size = act === 1 ? 2 + rand(2) : act === 2 ? 3 + rand(2) : 4 + rand(2);
-      const enemy = teamFrom(leader.team, size, lv + 1, 3, { perfectIvs: act });
+      const enemy = bossTeam(run, leader.team, size, lv + 1, 3, { perfectIvs: act });
       return gymSpec(leader, enemy);
     }
     case 'boss': return bossEncounter(run);
@@ -213,6 +245,12 @@ export function buildEncounter(run, node) {
 }
 
 function pickGym(run) {
+  if (isClassic(run)) {
+    // The region's Gym Leaders in their original order; rematches once all eight are beaten
+    const region = runRegion(run);
+    const order = classicOf(run).gyms.map(n => GYM_LEADERS.find(g => g.name === n && g.region === region));
+    return order.find(g => !run.beatenGyms.includes(g.name)) || pick(order);
+  }
   const options = GYM_LEADERS.filter(g => !run.beatenGyms.includes(g.name));
   return pick(options.length ? options : GYM_LEADERS);
 }
@@ -220,7 +258,7 @@ function gymSpec(leader, enemy) {
   const ace = Math.max(...enemy.map(m => m.lv));
   return {
     kind: 'gym', enemy, ai: 2, fullRestores: 1,
-    trainer: { name: leader.name, title: `${leader.region} Gym Leader`, sprite: leader.sprite, prize: 25 * ace, badge: `${leader.badge} Badge`, leader: leader.name, type: leader.type },
+    trainer: { name: leader.name, title: leader.title || `${leader.region} Gym Leader`, sprite: leader.sprite, prize: 25 * ace, badge: `${leader.badge} Badge`, leader: leader.name, type: leader.type },
   };
 }
 
@@ -228,11 +266,11 @@ export function bossEncounter(run) {
   const a = ACTS[run.act - 1];
   if (a.boss === 'gym') {
     const leader = pickGym(run);
-    return gymSpec(leader, teamFrom(leader.team, 3, a.bossLv - 3, 3, { perfectIvs: 2 }));
+    return gymSpec(leader, bossTeam(run, leader.team, 3, a.bossLv - 3, 3, { perfectIvs: 2 }));
   }
   if (a.boss === 'villainBoss') {
-    const v = pick(VILLAINS);
-    const enemy = teamFrom(v.boss.team, 4, a.bossLv - 3, 3, { perfectIvs: 3 });
+    const v = pickVillain(run);
+    const enemy = bossTeam(run, v.boss.team, 4, a.bossLv - 3, 3, { perfectIvs: 3 });
     return {
       kind: 'villainBoss', enemy, ai: 2, fullRestores: 1,
       trainer: { name: v.boss.name, title: v.boss.title, sprite: v.boss.sprite, prize: 40 * a.bossLv, quote: 'This is not the end...', team: v.team },
@@ -243,6 +281,14 @@ export function bossEncounter(run) {
 
 // ---------- Pokémon League (Act III boss) ----------
 export function startLeague(run) {
+  if (isClassic(run)) {
+    const c = classicOf(run), region = runRegion(run);
+    const members = c.e4.map(n => (ELITE_FOUR.find(e => e.name === n && e.region === region) || ELITE_FOUR.find(e => e.name === n)))
+      .map(e => e.name + '|' + e.region);
+    const champ = CHAMPIONS.find(x => x.name === c.champion);
+    run.league = { stage: 0, members, champion: champ.name + '|' + champ.region };
+    return;
+  }
   const members = [];
   const used = new Set();
   const shuffled = [...ELITE_FOUR].sort(() => Math.random() - 0.5);
@@ -262,15 +308,15 @@ export function leagueOpponent(run) {
   if (L.stage < 4) {
     const [name, region] = L.members[L.stage].split('|');
     const m = ELITE_FOUR.find(e => e.name === name && e.region === region);
-    return { info: m, title: 'Elite Four', spec: () => ({
-      kind: 'e4', enemy: teamFrom(m.team, 5, base + L.stage, 2, { perfectIvs: 4 }), ai: 2, fullRestores: 1,
-      trainer: { name: m.name, title: 'Elite Four', sprite: m.sprite, prize: 40 * (base + L.stage + 2), type: m.type },
+    return { info: m, title: m.title || 'Elite Four', spec: () => ({
+      kind: 'e4', enemy: bossTeam(run, m.team, 5, base + L.stage, 2, { perfectIvs: 4 }), ai: 2, fullRestores: 1,
+      trainer: { name: m.name, title: m.title || 'Elite Four', sprite: m.sprite, prize: 40 * (base + L.stage + 2), type: m.type },
     }) };
   }
   const [name, region] = L.champion.split('|');
   const c = CHAMPIONS.find(e => e.name === name && e.region === region);
   return { info: c, title: 'Champion', spec: () => ({
-    kind: 'champion', enemy: teamFrom(c.team, 6, base + 5, 3, { perfectIvs: 5 }), ai: 2, fullRestores: 2,
+    kind: 'champion', enemy: bossTeam(run, c.team, 6, base + 5, 3, { perfectIvs: 5 }), ai: 2, fullRestores: 2,
     trainer: { name: c.name, title: 'Champion', sprite: c.sprite, prize: 50 * (base + 8) },
   }) };
 }

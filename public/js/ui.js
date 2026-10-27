@@ -3,14 +3,14 @@ import { S, defaultProfile, normalizeProfile } from './state.js';
 import { api, configured, saveRun, saveProfile, flushSaves, cancelRunSave } from './api.js';
 import { DEX, MOVES, REGIONS, regionOf, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS } from './data.js';
 import {
-  calcStats, maxHp, monName, NATURES, STAT_LABELS, natureMod, expForLevel, gainExp, levelUp,
+  createMon, calcStats, maxHp, monName, NATURES, STAT_LABELS, natureMod, expForLevel, gainExp, levelUp,
   levelEvolution, itemEvolution, evolve, replaceMove,
 } from './mechanics.js';
 import {
   ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
-  spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf,
+  spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf, runRegion,
 } from './game.js';
-import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, trainerSpriteUrl } from './content.js';
+import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl } from './content.js';
 import { startBattle, applyItem } from './battle.js';
 import { renderBattle, beginBattle, onBattleAction, resumeBattleUI } from './battle-ui.js';
 import { playMusic, sfx, playCry, applyAudioSettings, unlockAudio } from './audio.js';
@@ -91,6 +91,7 @@ function monCard(m, i, { action = 'showSummary', extra = '' } = {}) {
     ${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', monName(m))}
     <div class="mon-card-body">
       <div class="row"><strong>${esc(monName(m))}${m.shiny ? ' ✦' : ''}</strong><span>Lv ${m.lv}</span></div>
+      <div class="card-types">${DEX[m.id].t.map(typeBadge).join('')}</div>
       ${hpBar(m.hp, max)}
       <div class="row small"><span>${m.hp}/${max} HP ${statusTag(m.st)}</span>${extra}</div>
     </div>
@@ -194,10 +195,11 @@ SCREENS.menu = () => {
     <div class="hero small">${img(artUrl(r ? r.party[0].id : 6), 'hero-art', '')}
       <h1>PokéSpire</h1><p class="muted">Welcome back, ${esc(S.user.username)}.</p></div>
     <div class="menu-buttons">
-      ${r ? `<button class="primary big" data-act="continueRun">Continue run<small>${diffOf(r).name} · ${ACTS[r.act - 1].name} · ${r.badges.length} badge${r.badges.length === 1 ? '' : 's'}</small></button>` : ''}
+      ${r ? `<button class="primary big" data-act="continueRun">Continue run<small>${GAME_MODES[modeOf(r)].name} · ${diffOf(r).name} · ${ACTS[r.act - 1].name} · ${r.badges.length} badge${r.badges.length === 1 ? '' : 's'}</small></button>` : ''}
       <button class="${r ? '' : 'primary'} big" data-act="play">${r ? 'New run' : 'Play'}<small>Choose a starter and begin</small></button>
       <button class="big" data-act="openSettings">Settings<small>Sound and text speed</small></button>
       <button class="big" data-act="openHistory">History<small>Previous runs and Hall of Fame</small></button>
+      ${S.user.isAdmin ? '<button class="big admin-btn" data-act="openAdmin">Admin panel<small>God mode and debug tools</small></button>' : ''}
       <button class="ghost" data-act="logout">Log out</button>
     </div>
     <div class="stat-row">
@@ -211,9 +213,9 @@ SCREENS.menu = () => {
 registerActions({
   play: () => {
     if (S.run) { S.modal = { type: 'confirm', text: 'Starting a new run will abandon your current one. It will be recorded in your history.', yes: 'abandonAndPlay' }; render(); return; }
-    go('difficulty');
+    go('mode');
   },
-  abandonAndPlay: async () => { S.modal = null; await endRun('Abandoned'); go('difficulty'); },
+  abandonAndPlay: async () => { S.modal = null; await endRun('Abandoned'); go('mode'); },
   continueRun: () => resumeRun(),
   openSettings: () => go('settings'),
   openHistory: async () => {
@@ -272,7 +274,7 @@ SCREENS.history = () => {
   const teamStrip = team => `<div class="team-strip">${(team || []).map(m => `<span title="${esc(m.name)} Lv ${m.lv}">${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', m.name)}<small>Lv ${m.lv}</small></span>`).join('')}</div>`;
   const runs = S.ui.loading ? '<p class="muted">Loading…</p>' : list.length ? list.map(h => `
     <article class="history-item ${h.result === 'Champion' ? 'win' : h.result === 'Defeated' ? 'loss' : ''}">
-      <div class="row"><strong>${esc(h.result)} <span class="diff-badge" style="--dc:${(DIFFICULTIES[h.difficulty] || DIFFICULTIES.medium).color}">${(DIFFICULTIES[h.difficulty] || DIFFICULTIES.medium).name}</span></strong><span class="muted">${new Date(h.createdAt).toLocaleString()}</span></div>
+      <div class="row"><strong>${esc(h.result)} ${h.mode ? modeBadge(h.mode) : ''} ${diffBadge(DIFFICULTIES[h.difficulty] ? h.difficulty : 'medium')}${h.god ? ' <span class="diff-badge" style="--dc:#ffd700;color:#1a1a1a">God mode</span>' : ''}</strong><span class="muted">${new Date(h.createdAt).toLocaleString()}</span></div>
       <p class="muted small">Starter: ${esc(DEX[h.starter]?.n || '?')} · Reached ${esc(h.reached || '')} · ${h.badges ?? 0} badges · ${h.caught ?? 0} caught · ${h.wins ?? 0} battles won${h.durationMin != null ? ` · ${h.durationMin} min` : ''}${h.defeatedBy ? ` · Lost to ${esc(h.defeatedBy)}` : ''}</p>
       ${teamStrip(h.team)}
     </article>`).join('') : '<p class="muted">No finished runs yet. Your completed, lost and abandoned runs will appear here.</p>';
@@ -293,11 +295,28 @@ SCREENS.history = () => {
 };
 registerActions({ historyTab: tab => go('history', { tab }) });
 
+// ---------- Game mode ----------
+const modeBadge = key => `<span class="diff-badge" style="--dc:${GAME_MODES[key].color};color:#1a1a1a">${GAME_MODES[key].name}</span>`;
+const diffBadge = key => `<span class="diff-badge" style="--dc:${DIFFICULTIES[key].color}">${DIFFICULTIES[key].name}</span>`;
+SCREENS.mode = () => {
+  playMusic('menu');
+  return `<section class="panel">
+    <div class="row"><h2>Choose a mode</h2><button data-act="back">Back</button></div>
+    <div class="difficulty-grid two">${Object.entries(GAME_MODES).map(([key, m]) => `
+      <button class="difficulty" style="--dc:${m.color}" data-act="pickMode" data-arg="${key}">
+        <strong>${m.name}</strong>
+        <ul>${m.rules.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+      </button>`).join('')}</div>
+  </section>`;
+};
+registerActions({ pickMode: key => go('difficulty', { mode: key }) });
+
 // ---------- Difficulty ----------
 SCREENS.difficulty = () => {
   playMusic('menu');
+  const mode = S.ui.mode || 'classic';
   return `<section class="panel">
-    <div class="row"><h2>Choose a difficulty</h2><button data-act="back">Back</button></div>
+    <div class="row"><h2>Choose a difficulty ${modeBadge(mode)}</h2><button data-act="toMode">Back</button></div>
     <p class="muted">Every run starts with $100. Battles pay out based on the opponent's level, and Trainers pay more than wild Pokémon.</p>
     <div class="difficulty-grid">${Object.entries(DIFFICULTIES).map(([key, d]) => `
       <button class="difficulty" style="--dc:${d.color}" data-act="pickDifficulty" data-arg="${key}">
@@ -306,10 +325,14 @@ SCREENS.difficulty = () => {
       </button>`).join('')}</div>
   </section>`;
 };
-registerActions({ pickDifficulty: key => go('starters', { region: 0, difficulty: key }) });
+registerActions({
+  toMode: () => go('mode'),
+  pickDifficulty: key => go('starters', { region: 0, difficulty: key, mode: S.ui.mode || 'classic' }),
+});
 
 // ---------- Starter selection ----------
 function starterPool() {
+  if (S.user?.isAdmin && S.profile.settings.allStarters) return Object.keys(DEX).map(Number);
   return [...new Set([...REGIONS[0].starters, ...S.profile.caught])].filter(id => DEX[id]);
 }
 SCREENS.starters = () => {
@@ -319,7 +342,8 @@ SCREENS.starters = () => {
   const ids = pool.filter(id => regionOf(id) === region).sort((a, b) => a - b);
   const counts = REGIONS.map((_, i) => pool.filter(id => regionOf(id) === i).length);
   return `<section class="panel">
-    <div class="row"><h2>Choose your partner <span class="diff-badge" style="--dc:${DIFFICULTIES[S.ui.difficulty || 'medium'].color}">${DIFFICULTIES[S.ui.difficulty || 'medium'].name}</span></h2><button data-act="toDifficulty">Back</button></div>
+    <div class="row"><h2>Choose your partner ${modeBadge(S.ui.mode || 'classic')} ${diffBadge(S.ui.difficulty || 'medium')}</h2><button data-act="toDifficulty">Back</button></div>
+    ${(S.ui.mode || 'classic') === 'classic' ? `<p class="notice">Classic mode: your partner's home region decides the journey. A ${REGIONS[region].name} Pokémon means ${REGIONS[region].name}'s Gym Leaders, villain team, Elite Four and Champion.</p>` : ''}
     <p class="muted">Your first run starts with the three Kanto starters. Every Pokémon you catch on a run joins this pool for future runs, sorted by its home region.</p>
     <div class="tabs wrap">${REGIONS.map((r, i) => `<button class="${i === region ? 'active' : ''}" data-act="starterRegion" data-arg="${i}">${r.name} <small>${counts[i]}</small></button>`).join('')}</div>
     <div class="starter-grid">
@@ -330,16 +354,17 @@ SCREENS.starters = () => {
   </section>`;
 };
 registerActions({
-  toDifficulty: () => go('difficulty'),
-  starterRegion: r => go('starters', { region: +r, difficulty: S.ui.difficulty }),
+  toDifficulty: () => go('difficulty', { mode: S.ui.mode }),
+  starterRegion: r => go('starters', { region: +r, difficulty: S.ui.difficulty, mode: S.ui.mode }),
   pickStarter: id => {
-    S.modal = { type: 'confirmStarter', id: +id, difficulty: S.ui.difficulty || 'medium' };
+    S.modal = { type: 'confirmStarter', id: +id, difficulty: S.ui.difficulty || 'medium', mode: S.ui.mode || 'classic' };
     render();
   },
   confirmStarter: async id => {
     const difficulty = S.modal?.difficulty || 'medium';
+    const mode = S.modal?.mode || 'classic';
     S.modal = null;
-    S.run = newRun(+id, difficulty);
+    S.run = newRun(+id, difficulty, mode);
     S.profile.stats.runs++;
     persistProfile();
     playCry(+id);
@@ -381,7 +406,7 @@ SCREENS.map = () => {
   }).join('');
   return `<section class="map-layout">
     <div class="panel map-panel">
-      <div class="row"><div><p class="eyebrow">${esc(ACTS[run.act - 1].name)} <span class="diff-badge" style="--dc:${diffOf(run).color}">${diffOf(run).name}</span></p><h2>Choose your path</h2></div>
+      <div class="row"><div><p class="eyebrow">${esc(ACTS[run.act - 1].name)} ${modeBadge(modeOf(run))} ${diffBadge(run.difficulty || 'medium')}${modeOf(run) === 'classic' ? ` · ${esc(runRegion(run))}` : ''}</p><h2>Choose your path</h2></div>
         <span class="muted">Boss: ${esc(bossLabel())}</span></div>
       <div class="map" style="height:${height}px"><svg width="100%" height="${height}">${lines}</svg>${btns}</div>
       <div class="legend">${Object.entries(NODE_INFO).filter(([k]) => k !== 'boss').map(([, v]) => `<span title="${esc(v.desc)}">${v.icon} ${v.label}</span>`).join('')}</div>
@@ -396,6 +421,7 @@ function bossLabel() {
 function sidePanel() {
   const run = S.run;
   return `<aside class="panel side">
+    ${run.god ? '<div class="god-banner">⚡ God mode is on</div>' : ''}
     <div class="wallet"><span>Money</span><b>$${run.money.toLocaleString()}</b></div>
     <h3>Team <small class="muted">${run.party.length}/6 · Box ${run.box.length}</small></h3>
     <div class="party-list">${run.party.map((m, i) => monCard(m, i)).join('')}</div>
@@ -404,6 +430,7 @@ function sidePanel() {
     <div class="badges">${run.badges.length ? run.badges.map(b => `<span class="badge" title="${esc(b.leader)}">${esc(b.name)}</span>`).join('') : '<span class="muted small">Defeat Gym Leaders to earn badges.</span>'}</div>
     <p class="muted small">Battles won: ${run.stats.wins} · Caught: ${run.stats.caught}</p>
     ${run.fallen?.length ? `<p class="muted small">Fallen: ${run.fallen.map(f => esc(f.name)).join(', ')}</p>` : ''}
+    ${S.user.isAdmin ? '<div class="row gap wrap"><button class="admin-btn" data-act="openAdmin">Admin panel</button></div>' : ''}
     <div class="row gap wrap"><button class="ghost" data-act="toMenu">Save & quit</button><button class="ghost danger" data-act="abandonRun">Abandon run</button></div>
   </aside>`;
 }
@@ -566,7 +593,7 @@ function renderModal() {
   } else if (m.type === 'confirmStarter') {
     const sp = DEX[m.id];
     body = `<div class="center-text">${img(artUrl(m.id), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
-      <p class="muted">Start a ${DIFFICULTIES[m.difficulty].name} run with ${sp.n}?</p></div>
+      <p class="muted">Start a ${GAME_MODES[m.mode].name} · ${DIFFICULTIES[m.difficulty].name} run with ${sp.n}?${m.mode === 'classic' ? ` You'll journey through ${REGIONS[regionOf(m.id)].name}.` : ''}</p></div>
       <div class="row gap"><button data-act="closeModal">Not yet</button><button class="primary" data-act="confirmStarter" data-arg="${m.id}">I choose you!</button></div>`;
   } else if (m.type === 'team') {
     body = `<h2>Team</h2><div class="party-list">${S.run.party.map((x, i) => monCard(x, i)).join('')}</div>
@@ -576,6 +603,8 @@ function renderModal() {
     body = summaryHtml(S.run.party[m.index], m.index);
   } else if (m.type === 'bag') {
     body = bagHtml(m.pocket);
+  } else if (m.type === 'admin') {
+    body = adminHtml();
   } else if (m.type === 'bagTarget') {
     body = `<h2>Use ${esc(m.item)}</h2><p class="muted">${esc(ITEMS[m.item].desc)}</p>
       <div class="party-list">${S.run.party.map((x, i) => monCard(x, i, { action: 'useItemOn', extra: itemHint(m.item, x) })).join('')}</div>
@@ -696,6 +725,87 @@ function useFieldItem(item, index) {
   persistRun();
   render();
 }
+
+// ---------- Admin panel (only for accounts with is_admin set in the database) ----------
+function adminHtml() {
+  const run = S.run;
+  const inBattle = !!run?.battle;
+  const runTools = run ? `
+    <h3>This run</h3>
+    <label class="check"><input type="checkbox" class="silent" data-act="adminGod" ${run.god ? 'checked' : ''}> <b>God mode</b> — your team can't be hurt, every hit knocks out, every Poké Ball catches</label>
+    <div class="admin-grid">
+      <button data-act="adminMoney">+$10,000</button>
+      <button data-act="adminItems">99 of every item</button>
+      <button data-act="adminHeal">Heal team</button>
+      <button data-act="adminLevels" data-arg="10">Team +10 levels</button>
+      <button data-act="adminLevels" data-arg="100">Team to Lv 100</button>
+      ${inBattle ? '' : `<button data-act="adminSkip" data-arg="2">Skip to Act II</button>
+      <button data-act="adminSkip" data-arg="3">Skip to Act III</button>
+      <button data-act="adminSkip" data-arg="league">Skip to the League</button>`}
+    </div>
+    <form data-form="adminAddMon" class="admin-add">
+      <label>Add a Pokémon<input name="species" list="species-list" placeholder="e.g. Rayquaza" required></label>
+      <label>Level<input name="level" type="number" min="1" max="100" value="50" required></label>
+      <button class="primary" type="submit">Add</button>
+    </form>
+    <datalist id="species-list">${Object.values(DEX).map(sp => `<option value="${esc(sp.n)}">`).join('')}</datalist>
+    <p class="muted small">Runs where God mode was turned on are tagged "God mode" in your history.</p>` : '<p class="muted">Start or continue a run to use God mode and the run tools.</p>';
+  return `<h2>Admin panel</h2>
+    ${runTools}
+    <h3>Account</h3>
+    <label class="check"><input type="checkbox" class="silent" data-act="adminAllStarters" ${S.profile.settings.allStarters ? 'checked' : ''}> Every Pokémon is available as a starter</label>
+    <div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`;
+}
+
+function adminOnly(fn) {
+  return (...args) => { if (S.user?.isAdmin) fn(...args); };
+}
+
+function setLevel(mon, lv) {
+  lv = Math.min(100, lv);
+  // Moves are learned into free slots; with four moves known, the current moves are kept
+  while (mon.lv < lv) levelUp(mon);
+  mon.exp = expForLevel(DEX[mon.id].gr, mon.lv);
+}
+
+registerActions({
+  openAdmin: adminOnly(() => { S.modal = { type: 'admin' }; render(); }),
+  adminGod: adminOnly((_, el) => {
+    S.run.god = el.checked;
+    if (el.checked) S.run.godUsed = true;
+    toast(el.checked ? 'God mode on' : 'God mode off');
+    persistRun(); render();
+  }),
+  adminMoney: adminOnly(() => { S.run.money += 10000; sfx('coin'); persistRun(); render(); }),
+  adminItems: adminOnly(() => { for (const name of Object.keys(ITEMS)) S.run.bag[name] = 99; sfx('coin'); toast('Bag filled'); persistRun(); render(); }),
+  adminHeal: adminOnly(() => { S.run.party.forEach(healPartyMon); sfx('heal'); persistRun(); render(); }),
+  adminLevels: adminOnly(arg => {
+    for (const m of S.run.party) { setLevel(m, arg === '100' ? 100 : m.lv + 10); m.hp = maxHp(m); }
+    sfx('levelup'); toast('Team leveled up'); persistRun(); render();
+  }),
+  adminSkip: adminOnly(arg => {
+    const run = S.run;
+    run.act = arg === 'league' ? 3 : +arg;
+    run.map = generateMap(run.act);
+    run.league = null; run.node = null; run.battle = null;
+    if (arg === 'league') {
+      const pre = Object.values(run.map.nodes).find(n => n.r === ROWS - 2);
+      run.pos = pre.id; run.visited = [pre.id];
+    } else { run.pos = null; run.visited = []; }
+    S.modal = null; persistRun(); go('map');
+  }),
+  adminAddMon: adminOnly(fd => {
+    const name = String(fd.get('species') || '').trim().toLowerCase();
+    const sp = Object.values(DEX).find(x => x.n.toLowerCase() === name);
+    if (!sp) { toast('No Pokémon with that name'); return; }
+    const mon = createMon(sp.id, Math.max(1, Math.min(100, +fd.get('level') || 50)));
+    const where = storeCaught(S.run, mon);
+    S.run.stats.caught--; // not a real catch
+    toast(`${sp.n} added to your ${where === 'party' ? 'team' : 'Box'}`);
+    persistRun(); render();
+  }),
+  adminAllStarters: adminOnly((_, el) => { S.profile.settings.allStarters = el.checked; persistProfile(); render(); }),
+});
 
 // ---------- Flows: move learning, evolution, messages (persisted in run.flow) ----------
 export function queueFlow(steps, then = null) {
@@ -961,7 +1071,7 @@ export async function endRun(result, defeatedBy = null) {
   cancelRunSave();
   const reached = run.league ? (run.league.stage >= 5 ? 'Hall of Fame' : run.league.stage === 4 ? 'Champion' : `Elite Four ${run.league.stage + 1}`) : `Act ${run.act}, floor ${run.pos ? run.map.nodes[run.pos].r + 1 : 0}`;
   const entry = {
-    result, difficulty: run.difficulty || 'medium', starter: run.starter, act: run.act, reached, badges: run.badges.length,
+    result, difficulty: run.difficulty || 'medium', mode: modeOf(run), god: !!run.godUsed, starter: run.starter, act: run.act, reached, badges: run.badges.length,
     caught: run.stats.caught, wins: run.stats.wins, team: partySummary(run.party),
     startedAt: run.startedAt, durationMin: Math.round((Date.now() - new Date(run.startedAt).getTime()) / 60000),
     ...(defeatedBy ? { defeatedBy } : {}),

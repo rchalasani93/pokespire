@@ -8,7 +8,11 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Main menu.** Continue run, Play, Settings (master, music and sound-effect volume, mute, text speed), and History (previous runs plus the Hall of Fame).
 
-**Difficulty.** After clicking Play you pick a mode:
+**Game mode.** After clicking Play you choose:
+- **Classic:** your starter's home region sets the journey: that region's Gym Leaders in their original order with signature teams, its villain team, its Elite Four and Champion, and wild Pokémon and Trainers from its Pokédex. Alola uses its Trial Captains and Kahuna; Galar's "Elite Four" is the Champion Cup (Marnie, Hop, Bede, Raihan).
+- **Randomized:** Gym Leaders, villain teams, Elite Four and Champion are drawn from every region, and every Trainer and boss team is fully randomized.
+
+**Difficulty.** Next you pick a difficulty:
 
 | | Easy | Medium | Hard | Hell |
 | --- | --- | --- | --- | --- |
@@ -22,6 +26,8 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 | Special rules | — | — | — | Nuzlocke: fainted Pokémon are gone for good, no items in trainer battles, no Revives |
 
 **Money.** Every run starts with $100, shown on the map, in battle and at the PokéMart. Winning a battle pays out based on the opponent's level: wild Pokémon pay $2 per level (Elite Pokémon $5, Legendaries $8), and Trainers pay more, from $4 per level for a Youngster up to $50 per level for the Champion.
+
+**Admin / God mode.** Accounts with `is_admin` set in the database get an Admin panel (main menu and map): God mode (your team can't be hurt, every hit knocks out, every Poké Ball catches), +$10,000, 99 of every item, team level-ups, adding any Pokémon, skipping to Act II, Act III or the League, and unlocking every Pokémon as a starter. Players can't set the flag themselves. Grant it in the Supabase SQL Editor with `update public.profiles set is_admin = true where username = 'YourName';`. Runs where God mode was used are tagged in history.
 
 **Starters by region.** Your first run offers the three Kanto starters. Every Pokémon you catch, on any run, joins the starter pool for future runs, grouped by its home region (Kanto through Paldea).
 

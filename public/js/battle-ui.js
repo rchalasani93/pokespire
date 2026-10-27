@@ -94,9 +94,11 @@ function battleScreen() {
   const enemyBalls = b.trainer ? `<div class="team-balls">${b.enemy.map(m => `<i class="${m.hp > 0 ? '' : 'out'}"></i>`).join('')}</div>` : '';
   const scene = `<div class="scene kind-${b.kind}">
     <div class="wallet-chip">$${run.money.toLocaleString()}</div>
+    ${run.god ? '<div class="god-chip">⚡ GOD</div>' : ''}
     ${b.trainer ? `<img class="trainer-sprite" src="${trainerSpriteUrl(b.trainer.sprite)}" alt="" onerror="this.remove()">` : ''}
     <div class="hud foe">
       <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' ✦' : ''}</strong><span>Lv ${E?.lv}</span></div>
+      <div class="hud-types">${E ? DEX[E.id].t.map(typeBadge).join('') : ''}</div>
       ${E ? hpBar(E.hp, E.max) : ''}
       <div class="row small">${statusTag(E?.st)}${b.enemy[b.ei]?.elite ? '<span class="elite-tag">ELITE</span>' : ''}${enemyBalls}</div>
     </div>
@@ -108,6 +110,7 @@ function battleScreen() {
     </div>
     <div class="hud player">
       <div class="row"><strong>${esc(P?.name)}${P?.shiny ? ' ✦' : ''}</strong><span>Lv ${P?.lv}</span></div>
+      <div class="hud-types">${P ? DEX[P.id].t.map(typeBadge).join('') : ''}</div>
       ${P ? hpBar(P.hp, P.max) : ''}
       <div class="row small"><span>${statusTag(P?.st)}</span><span>${P?.hp}/${P?.max}</span></div>
       <div class="expbar"><i style="width:${expPct}%"></i></div>
@@ -169,7 +172,7 @@ function partyPicker(act, allowed) {
     const max = maxHp(m);
     return `<button data-act="${act}" data-arg="${i}" ${allowed(m, i) ? '' : 'disabled'} class="${m.hp <= 0 ? 'fainted' : ''}">
       <img src="${spriteUrl(m.id, { shiny: m.shiny })}" alt="">
-      <span><strong>${esc(monName(m))}</strong> Lv ${m.lv}<br>${hpBar(m.hp, max)}<small>${m.hp}/${max} ${statusTag(m.st)}</small></span></button>`;
+      <span><strong>${esc(monName(m))}</strong> Lv ${m.lv} ${DEX[m.id].t.map(typeBadge).join('')}<br>${hpBar(m.hp, max)}<small>${m.hp}/${max} ${statusTag(m.st)}</small></span></button>`;
   }).join('')}</div>`;
 }
 

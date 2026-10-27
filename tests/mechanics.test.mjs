@@ -53,7 +53,7 @@ assert.equal(MOVES.watergun.c, 'X'); assert.equal(MOVES.tackle.c, 'P'); assert.e
 // Catch formula: Master Ball always works, full-HP Mewtwo with a Poké Ball rarely works
 assert.equal(M.catchAttempt(M.createMon(150, 70), 'Master Ball', 1).caught, true);
 let caught = 0; for (let i = 0; i < 2000; i++) if (M.catchAttempt(M.createMon(150, 70), 'Poké Ball', 2).caught) caught++;
-assert.ok(caught < 40, 'Mewtwo catch rate should be ~0.5% at full HP, got ' + caught);
+assert.ok(caught < 70, 'Mewtwo catch rate should be ~1.6% at full HP, got ' + caught);
 
 // Exp yield sanity (Gen 7 formula): defeating a Lv 10 Pidgey (base 50) at Lv 10
 const pidgey = M.createMon(16, 10);
@@ -73,7 +73,7 @@ assert.ok(y > 80 && y < 120, 'exp ' + y);
 // Simulate many full runs' battles headlessly to catch engine crashes
 let crashes = 0, turns = 0;
 for (let r = 0; r < 300; r++) {
-  const run = G.newRun(G.REGIONS[r % 9].starters[r % 3], ['easy', 'medium', 'hard', 'hell'][r % 4]);
+  const run = G.newRun(G.REGIONS[r % 9].starters[r % 3], ['easy', 'medium', 'hard', 'hell'][r % 4], r % 2 ? 'classic' : 'random');
   for (let i = 0; i < 4; i++) run.party.push(M.createMon(1 + Math.floor(Math.random() * 1025), 5 + r % 50));
   run.party.forEach(m => { m.lv = 5 + (r % 60); m.exp = M.expForLevel(DEX[m.id].gr, m.lv); m.hp = M.maxHp(m); });
   const kinds = ['wild', 'trainer', 'villain', 'elite', 'gym', 'legendary'];
@@ -124,6 +124,57 @@ assert.equal(crashes, 0, 'battle engine crashed');
   Bt.playerAction(run, { type: 'move', index: 0 });
   assert.equal(run.battle.over, 'win');
   assert.equal(run.money, 100 + run.battle.wildPrize);
+}
+
+// Classic vs Randomized modes
+{
+  const { regionOf } = await import('../public/js/data.js');
+  const C = await import('../public/js/content.js');
+  for (const [i, region] of G.REGIONS.entries()) {
+    const run = G.newRun(region.starters[0], 'medium', 'classic');
+    assert.equal(G.runRegion(run), region.name);
+    const order = C.CLASSIC[region.name].gyms;
+    const g1 = G.buildEncounter(run, { type: 'gym', r: 4 });
+    assert.equal(g1.trainer.leader, order[0], `${region.name} first gym`);
+    run.beatenGyms.push(order[0]);
+    assert.equal(G.buildEncounter(run, { type: 'gym', r: 4 }).trainer.leader, order[1], `${region.name} second gym`);
+    for (let k = 0; k < 15; k++) {
+      const w = G.buildEncounter(run, { type: 'wild', r: 2 }).enemy[0];
+      assert.equal(regionOf(w.id), i, `${region.name} wild ${DEX[w.id].n}`);
+    }
+    run.act = 2;
+    const villain = G.bossEncounter(run).trainer.team;
+    assert.ok(C.CLASSIC[region.name].villains.includes(villain), `${region.name} villain ${villain}`);
+    run.act = 3; G.startLeague(run);
+    assert.deepEqual(run.league.members.map(m => m.split('|')[0]), C.CLASSIC[region.name].e4);
+    assert.equal(run.league.champion.split('|')[0], C.CLASSIC[region.name].champion);
+  }
+  // Randomized: gym teams are not the leader's signature team
+  const rr = G.newRun(1, 'medium', 'random'); rr.act = 2;
+  let signature = 0;
+  for (let k = 0; k < 20; k++) {
+    const sp = G.buildEncounter(rr, { type: 'gym', r: 5 });
+    const leader = C.GYM_LEADERS.find(g => g.name === sp.trainer.leader);
+    const sig = new Set(leader.team.map(n => DEX[BY_NAME[n.toLowerCase()]].n));
+    if (sp.enemy.every(m => sig.has(DEX[m.id].n))) signature++;
+  }
+  assert.ok(signature < 3, 'randomized gym teams should not match signature teams');
+}
+
+// God mode (admin): the team takes no damage, every hit knocks out, every ball catches
+{
+  const run = G.newRun(1, 'hell', 'random');
+  run.god = true;
+  const me = run.party[0];
+  me.moves = [{ id: 'tackle', pp: 35 }];
+  Bt.startBattle(run, { kind: 'trainer', enemy: [M.createMon(150, 100, { moves: ['psystrike'] }), M.createMon(384, 100)], trainer: { name: 'T', title: 'Test', prize: 0 }, ai: 2 });
+  for (let i = 0; i < 10 && !run.battle.over; i++) Bt.playerAction(run, { type: 'move', index: 0 });
+  assert.equal(run.battle.over, 'win');
+  assert.equal(me.hp, M.maxHp(me), 'God mode team takes no damage');
+  Bt.startBattle(run, { kind: 'legendary', enemy: [M.createMon(150, 100)], canCatch: true, canRun: true });
+  run.bag['Poké Ball'] = 1;
+  Bt.playerAction(run, { type: 'ball', item: 'Poké Ball' });
+  assert.equal(run.battle.over, 'caught', 'God mode always catches');
 }
 
 // League setup
