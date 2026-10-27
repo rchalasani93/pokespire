@@ -52,6 +52,8 @@ h2 small, h3 small { font-weight: 400; font-size: .8rem; }
 .muted { color: var(--muted); }
 .small { font-size: .82rem; }
 .error { color: #ff9b8a; }
+.notice { color: var(--good); }
+code { background: #0b1220; padding: 1px 5px; border-radius: 5px; }
 .good-text { color: var(--good); }
 .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--accent2); margin: 0; }
 .center-text { text-align: center; }

@@ -61,3 +61,6 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local Supabase settings (the deploy workflow writes this file from repository secrets)
+public/config.js

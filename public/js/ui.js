@@ -1,6 +1,6 @@
 // Screens, overlays and player flows (everything except the battle screen).
 import { S, defaultProfile, normalizeProfile } from './state.js';
-import { api, saveRun, saveProfile, flushSaves, cancelRunSave } from './api.js';
+import { api, configured, saveRun, saveProfile, flushSaves, cancelRunSave } from './api.js';
 import { DEX, MOVES, REGIONS, regionOf, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS } from './data.js';
 import {
   calcStats, maxHp, monName, NATURES, STAT_LABELS, natureMod, expForLevel, gainExp, levelUp,
@@ -122,9 +122,11 @@ SCREENS.auth = () => {
       </div>
       <p class="muted">${mode === 'login' ? 'Log in to continue your journey. Your runs, catches and settings are saved to your account.' : 'Create an account to track your runs and save your progress.'}</p>
       <form data-form="${mode}">
-        <label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" value="${esc(S.ui.username || '')}"></label>
+        ${mode === 'signup' ? `<label>Username<input name="username" autocomplete="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" title="3–20 letters, numbers or underscores" value="${esc(S.ui.username || '')}"></label>` : ''}
+        <label>Email<input name="email" type="email" autocomplete="email" required value="${esc(S.ui.email || '')}"></label>
         <label>Password<input name="password" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}" required minlength="${mode === 'signup' ? 8 : 1}"></label>
         ${mode === 'signup' ? '<label>Confirm password<input name="confirm" type="password" autocomplete="new-password" required minlength="8"></label>' : ''}
+        ${S.ui.notice ? `<p class="notice" role="status">${esc(S.ui.notice)}</p>` : ''}
         ${S.ui.error ? `<p class="error" role="alert">${esc(S.ui.error)}</p>` : ''}
         <button class="primary big" type="submit" ${S.ui.busy ? 'disabled' : ''}>${S.ui.busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}</button>
       </form>
@@ -140,18 +142,29 @@ registerActions({
 
 async function doAuth(mode, fd) {
   const username = (fd.get('username') || '').trim();
+  const email = (fd.get('email') || '').trim();
   const password = fd.get('password') || '';
-  if (mode === 'signup' && password !== fd.get('confirm')) { go('auth', { mode, username, error: 'Passwords do not match.' }); return; }
-  go('auth', { mode, username, busy: true });
+  const keep = { mode, username, email };
+  if (mode === 'signup' && password !== fd.get('confirm')) { go('auth', { ...keep, error: 'Passwords do not match.' }); return; }
+  go('auth', { ...keep, busy: true });
   try {
-    await api[mode](username, password);
+    if (mode === 'signup') {
+      const { needsConfirmation } = await api.signup(username, email, password);
+      if (needsConfirmation) {
+        go('auth', { mode: 'login', email, notice: `Account created! We sent a confirmation link to ${email}. Click it, then log in.` });
+        return;
+      }
+    } else {
+      await api.login(email, password);
+    }
     await loadAccount();
   } catch (e) {
-    go('auth', { mode, username, error: e.message });
+    go('auth', { ...keep, error: e.message });
   }
 }
 
 export async function loadAccount() {
+  if (!configured) { go('setup'); return; }
   try {
     const me = await api.me();
     S.user = me.user;
@@ -166,6 +179,12 @@ export async function loadAccount() {
     go('auth', { mode: 'login' });
   }
 }
+
+SCREENS.setup = () => `<section class="panel narrow">
+  <h2>Almost ready</h2>
+  <p>PokéSpire needs a Supabase project for accounts and saves, but <code>config.js</code> has no Supabase URL or key yet.</p>
+  <p class="muted">Copy <code>public/config.example.js</code> to <code>public/config.js</code> and fill in your project's URL and anon key. The README has step-by-step setup.</p>
+</section>`;
 
 // ---------- Main menu ----------
 SCREENS.menu = () => {

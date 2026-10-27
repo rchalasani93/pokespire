@@ -8,7 +8,7 @@ export const BY_NAME = {};
 export async function loadData() {
   const files = ['pokedex', 'moves', 'learnsets', 'types'];
   const [dex, moves, learn, types] = await Promise.all(
-    files.map(f => fetch(`/data/${f}.json`).then(r => {
+    files.map(f => fetch(new URL(`../data/${f}.json`, import.meta.url)).then(r => {
       if (!r.ok) throw new Error(`Failed to load ${f}.json`);
       return r.json();
     }))

@@ -1,19 +1,15 @@
 {
   "name": "pokespire",
   "version": "1.0.0",
-  "description": "A roguelike Pokémon expedition: climb the map, build a team, beat the Elite Four.",
+  "description": "A roguelike Pokémon journey: branching routes, Gym Leaders, villain teams, Legendaries, the Elite Four and the Hall of Fame.",
   "scripts": {
-    "dev": "wrangler dev",
-    "db:migrate:local": "wrangler d1 migrations apply pokespire --local",
-    "db:migrate:remote": "wrangler d1 migrations apply pokespire --remote",
-    "deploy": "wrangler deploy",
-    "build:data": "node scripts/build-data.mjs",
-    "test": "node tests/mechanics.test.mjs"
+    "dev": "node scripts/serve.mjs",
+    "test": "node tests/mechanics.test.mjs",
+    "build:data": "node scripts/build-data.mjs"
   },
   "license": "UNLICENSED",
   "devDependencies": {
-    "@pkmn/dex": "^0.10.11",
-    "wrangler": "^4.153.0"
+    "@pkmn/dex": "^0.10.11"
   },
   "private": true,
   "type": "module",
