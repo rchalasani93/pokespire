@@ -1,28 +1,67 @@
-# Angular specific
-/dist/
-/out-tsc/
-/tmp/
-/coverage/
-/e2e/test-output/
-/.angular/
-.angular/
+# ---------------------------------------------------------------
+# Assistant and agent tool files — keep these out of the repository
+# ---------------------------------------------------------------
+.openai/
+.codex/
+.agents/
+.agent/
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.gemini/
+.cursor/
+.cursorrules
+.cursorignore
+.windsurf/
+.windsurfrules
+.continue/
+.aider*
+.copilot/
+.github/copilot-instructions.md
+.github/instructions/
+.roo/
+.clinerules
+.cline/
+.tabnine/
+.codeium/
+.sourcegraph/
+.mcp.json
+mcp.json
+*.prompt.md
+# Leftover hosting scaffolding from the old site template
+.sites-runtime/
+_old-sites-scaffold/
 
-# Node modules and dependency files
-/node_modules/
-/package-lock.json
-/yarn.lock
-
-# Environment files
-/.env
-
-# Angular CLI and build artefacts
-/.angular-cli.json
-/.ng/
-
-# TypeScript cache
+# ---------------------------------------------------------------
+# Dependencies & build output
+# ---------------------------------------------------------------
+node_modules/
+dist/
+.wrangler/
+coverage/
 *.tsbuildinfo
 
-# Logs
+# ---------------------------------------------------------------
+# Secrets & local environment
+# ---------------------------------------------------------------
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+*.pem
+
+# ---------------------------------------------------------------
+# Logs, editors & OS files
+# ---------------------------------------------------------------
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+*.log
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
