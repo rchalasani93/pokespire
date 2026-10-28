@@ -9,7 +9,7 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 **Main menu.** Continue run, Play, Settings (master, music and sound-effect volume, mute, text speed), and History (previous runs plus the Hall of Fame).
 
 **Game mode.** After clicking Play you choose:
-- **Classic:** your starter's home region sets the journey: that region's Gym Leaders in their original order with signature teams, its villain team, its Elite Four and Champion, and wild Pokémon and Trainers from its Pokédex. Alola uses its Trial Captains and Kahuna; Galar's "Elite Four" is the Champion Cup (Marnie, Hop, Bede, Raihan).
+- **Classic:** your starter's home region sets the journey: that region's Gym Leaders in their original order with signature teams, its villain team, its Elite Four and Champion. Wild Pokémon, Legendaries and Trainers' Pokémon come from every region. Alola uses its Trial Captains and Kahuna; Galar's "Elite Four" is the Champion Cup (Marnie, Hop, Bede, Raihan).
 - **Randomized:** Gym Leaders, villain teams, Elite Four and Champion are drawn from every region, and every Trainer and boss team is fully randomized.
 
 **Difficulty.** Next you pick a difficulty. Only Easy is open at first: entering the Hall of Fame on a difficulty unlocks the next one (Easy → Medium → Hard → Hell). Runs that used God mode or admin tools don't count; admins can pick any difficulty.

@@ -163,17 +163,13 @@ export const runRegion = run => REGIONS[run.region ?? regionOf(run.starter)].nam
 const classicOf = run => CLASSIC[runRegion(run)];
 
 /** In Classic mode keep only Pokémon from the run's region (falls back to everything if too few). */
-function regional(run, list) {
-  if (!isClassic(run)) return list;
-  const r = run.region ?? regionOf(run.starter);
-  const f = list.filter(id => regionOf(id) === r);
-  return f.length >= 3 ? f : list;
-}
+// Wild Pokémon, Elite Pokémon, Legendaries and Trainers' Pokémon come from every region in both modes
+const regional = (run, list) => list;
 
 function randomOfTypes(run, types) {
   const p = getPools();
   const pool = types ? regional(run, [...new Set(types.flatMap(t => p.byType[t] || []))]) : [];
-  return pick(pool.length && (!isClassic(run) || pool.some(id => regionOf(id) === run.region)) ? pool : regional(run, p.wildBase));
+  return pick(pool.length ? pool : p.wildBase);
 }
 
 /** A fully random team for Randomized mode, levels rising to the ace. */
@@ -214,9 +210,8 @@ export function buildEncounter(run, node) {
       return { kind: 'elite', enemy: [mon], canCatch: true, canRun: true, ai: 1, intro: `A towering Elite ${DEX[mon.id].n} blocks the path!` };
     }
     case 'legendary': {
-      const regionLegends = isClassic(run) ? P.legends.filter(x => regionOf(x) === run.region) : [];
-      // Don't repeat a Legendary within a run while others are left
-      const pool0 = regionLegends.length ? regionLegends : act === 1 ? P.subLegends : P.legends;
+      // Any region's Legendaries (lighter ones in Act I); no repeats within a run while others are left
+      const pool0 = act === 1 ? P.subLegends : P.legends;
       const fresh = pool0.filter(x => !(run.legendsSeen || []).includes(x));
       const id = pick(fresh.length ? fresh : pool0);
       (run.legendsSeen ||= []).push(id);

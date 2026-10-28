@@ -163,10 +163,10 @@ assert.equal(crashes, 0, 'battle engine crashed');
     assert.equal(g1.trainer.leader, order[0], `${region.name} first gym`);
     run.beatenGyms.push(order[0]);
     assert.equal(G.buildEncounter(run, { type: 'gym', r: 4 }).trainer.leader, order[1], `${region.name} second gym`);
-    for (let k = 0; k < 15; k++) {
-      const w = G.buildEncounter(run, { type: 'wild', r: 2 }).enemy[0];
-      assert.equal(regionOf(w.id), i, `${region.name} wild ${DEX[w.id].n}`);
-    }
+    // Wild Pokémon can come from any region, even in Classic
+    const regions = new Set();
+    for (let k = 0; k < 60; k++) regions.add(regionOf(G.buildEncounter(run, { type: 'wild', r: 2 }).enemy[0].id));
+    assert.ok(regions.size > 3, `${region.name} wilds from many regions`);
     run.act = 2;
     const villain = G.bossEncounter(run).trainer.team;
     assert.ok(C.CLASSIC[region.name].villains.includes(villain), `${region.name} villain ${villain}`);

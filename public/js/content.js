@@ -412,7 +412,7 @@ export const CLASSIC = {
 export const GAME_MODES = {
   classic: {
     name: 'Classic', color: '#ffcb05',
-    rules: ["Your starter's home region sets the whole journey", "That region's Gym Leaders, in order, with their signature teams", "Its villain team, Elite Four and Champion", 'Wild Pokémon and Trainers use that region\'s Pokédex'],
+    rules: ["Your starter's home region sets the whole journey", "That region's Gym Leaders, in order, with their signature teams", "Its villain team, Elite Four and Champion", 'Wild Pokémon, Legendaries and Trainers\' Pokémon from every region'],
   },
   random: {
     name: 'Randomized', color: '#b48cff',
