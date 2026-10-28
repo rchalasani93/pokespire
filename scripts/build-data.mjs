@@ -115,6 +115,13 @@ for (const id of usedMoves) {
   }).filter(x => Object.keys(x).length > 1);
   if (sec.length) o.sec = sec;
   if (m.category !== 'Status' && !m.basePower && !m.damage && !m.ohko && !o.half) o.p = 60; // variable-power moves
+  // Z-Move and Max Move power, Z effects of status moves, weather/terrain setters, contact
+  if (m.category !== 'Status') { if (m.zMove?.basePower) o.z = m.zMove.basePower; if (m.maxMove?.basePower) o.mx = m.maxMove.basePower; }
+  else if (m.zMove?.boost) o.zb = m.zMove.boost;
+  else if (m.zMove?.effect) o.ze = m.zMove.effect;
+  if (m.weather) o.weather = { sunnyday: 'sun', raindance: 'rain', sandstorm: 'sand', snowscape: 'snow', hail: 'snow', chillyreception: 'snow' }[m.id] || null;
+  if (m.terrain) o.terrain = { electricterrain: 'electric', grassyterrain: 'grassy', psychicterrain: 'psychic', mistyterrain: 'misty' }[m.id] || null;
+  if (m.flags?.contact) o.ct = 1;
   o.d = m.shortDesc;
   moves[id] = o;
 }
@@ -147,7 +154,34 @@ for (const sp of Object.values(pokedex)) {
   }
 }
 
+// Battle forms: Mega Evolution, Primal Reversion and Gigantamax (sprite ids are PokeAPI's)
+const pokeapiIds = Object.fromEntries((await csv('pokemon')).map(r => [r.identifier, +r.id]));
+const formSlug = name => name.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/--+/g, '-');
+const forms = {};
+for (const f of Dex.species.all()) {
+  if (f.isNonstandard === 'CAP' || !pokedex[f.num]) continue;
+  const megaLike = f.forme.startsWith('Mega') || f.forme === 'Primal';
+  if (megaLike) {
+    const entry = {
+      n: f.forme === 'Primal' ? `Primal ${f.baseSpecies}` : `Mega ${f.baseSpecies}${f.forme.replace(/^Mega/, '').replace('-', ' ')}`,
+      kind: f.forme === 'Primal' ? 'primal' : 'mega',
+      t: f.types, b: [f.baseStats.hp, f.baseStats.atk, f.baseStats.def, f.baseStats.spa, f.baseStats.spd, f.baseStats.spe],
+      ab: f.abilities[0], s: pokeapiIds[formSlug(f.name)] || null,
+    };
+    if (f.requiredItem) entry.item = f.requiredItem;
+    if (f.requiredMove) entry.move = Dex.moves.get(f.requiredMove).id;
+    if (!entry.item && !entry.move) continue;
+    ((forms[f.num] ||= {}).mega ||= []).push(entry);
+  }
+  if (f.forme === 'Gmax') {
+    const base = Dex.species.get(f.baseSpecies);
+    const mv = Dex.moves.get(base.canGigantamax);
+    (forms[f.num] ||= {}).gmax = { move: mv.name, mt: mv.type, s: pokeapiIds[formSlug(f.name)] || null };
+  }
+}
+
 mkdirSync('public/data', { recursive: true });
+writeFileSync('public/data/forms.json', JSON.stringify(forms));
 writeFileSync('public/data/pokedex.json', JSON.stringify(pokedex));
 writeFileSync('public/data/moves.json', JSON.stringify(moves));
 writeFileSync('public/data/learnsets.json', JSON.stringify(learnsets));

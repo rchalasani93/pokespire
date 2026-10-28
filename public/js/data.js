@@ -5,10 +5,11 @@ export const LEARN = {};
 export const TYPES = {};
 export const BY_NAME = {};
 export const ABILITIES = {};
+export const FORMS = {};
 
 export async function loadData() {
-  const files = ['pokedex', 'moves', 'learnsets', 'types', 'abilities'];
-  const [dex, moves, learn, types, abilities] = await Promise.all(
+  const files = ['pokedex', 'moves', 'learnsets', 'types', 'abilities', 'forms'];
+  const [dex, moves, learn, types, abilities, forms] = await Promise.all(
     files.map(f => fetch(new URL(`../data/${f}.json`, import.meta.url)).then(r => {
       if (!r.ok) throw new Error(`Failed to load ${f}.json`);
       return r.json();
@@ -19,6 +20,7 @@ export async function loadData() {
   Object.assign(LEARN, learn);
   Object.assign(TYPES, types);
   Object.assign(ABILITIES, abilities);
+  Object.assign(FORMS, forms);
   for (const [id, s] of Object.entries(DEX)) {
     s.id = +id;
     BY_NAME[s.n.toLowerCase()] = +id;

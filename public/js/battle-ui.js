@@ -2,14 +2,16 @@
 import { S } from './state.js';
 import { DEX, MOVES, spriteUrl, typeEffect, TYPE_COLORS } from './data.js';
 import { maxHp, monName, expForLevel } from './mechanics.js';
-import { playerAction, forceSwitch, battleView } from './battle.js';
-import { ITEMS, trainerSpriteUrl } from './content.js';
+import { playerAction, forceSwitch, battleView, gimmickOptions } from './battle.js';
+import { ITEMS, trainerSpriteUrl, Z_MOVES, MAX_MOVES, GIMMICK_NAMES } from './content.js';
+import { typesOf, teraType } from './mechanics.js';
+import { FORMS } from './data.js';
 import { playMusic, sfx, playCry } from './audio.js';
 import {
-  go, render, registerActions, esc, hpBar, statusTag, typeBadge, persistRun, queueFlow, finishBattle, SCREENS, caughtMark, learnPrompt,
+  go, render, registerActions, esc, hpBar, statusTag, typeBadge, persistRun, queueFlow, finishBattle, SCREENS, caughtMark, learnPrompt, rewardPrompt,
 } from './ui.js';
 
-const B = { queue: [], view: null, text: '', mode: 'main', playing: false, timer: null, item: null, fx: null, captured: false };
+const B = { queue: [], view: null, text: '', mode: 'main', playing: false, timer: null, item: null, fx: null, captured: false, gimmick: null };
 const DELAY = { slow: 1500, normal: 1000, fast: 550 };
 const BOSS_KINDS = ['gym', 'villainBoss', 'e4', 'champion', 'legendary', 'elite'];
 
@@ -84,7 +86,7 @@ function battleScreen() {
   const run = S.run;
   const b = run.battle || S.lastBattle;
   if (!b) return '';
-  const v = B.view || (run.battle ? battleView(run) : run.postBattle?.view || { p: null, e: null });
+  const v = (!run.battle && run.postBattle?.view) || B.view || (run.battle ? battleView(run) : { p: null, e: null });
   const P = v.p, E = v.e;
   const pMon = run.party.find(m => m.uid === P?.uid);
   let expPct = 0;
@@ -99,29 +101,30 @@ function battleScreen() {
     <div class="foe-col">
     <div class="hud foe">
       <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} ${E ? caughtMark(E.id) : ''}</strong><span>Lv ${E?.lv}</span></div>
-      <div class="hud-types">${E ? DEX[E.id].t.map(typeBadge).join('') : ''}</div>
+      <div class="hud-types">${E ? (E.t || DEX[E.id].t).map(typeBadge).join('') : ''}${formTag(E)}</div>
       ${E ? hpBar(E.hp, E.max) : ''}
       <div class="row small status-line"><span>${statusTag(E?.st)}${b.enemy[b.ei]?.elite ? '<span class="elite-tag">ELITE</span>' : ''}</span>${enemyBalls}</div>
     </div>
     <div class="wallet-chip">$${run.money.toLocaleString()} · ${(run.score || 0).toLocaleString()} pts</div>
     ${run.god ? '<div class="god-chip">⚡ GOD</div>' : ''}
     </div>
-    <div class="sprite-wrap foe ${fx.hit === 'e' ? 'hit' : ''} ${fx.faint === 'e' || (E && E.hp <= 0) ? 'fainted' : ''} ${B.captured ? 'captured' : ''} ${fx.send === 'e' ? 'sendout' : ''} ${E?.shiny ? 'is-shiny' : ''} ${fx.sparkle ? 'sparkle' : ''}">
-      ${E ? `<img src="${spriteUrl(E.id, { shiny: E.shiny })}" alt="${esc(E.name)}">` : ''}
+    ${fieldChip(v)}
+    <div class="sprite-wrap foe ${E?.dmax ? 'dmax' : ''} ${E?.tera ? 'tera' : ''} ${fx.hit === 'e' ? 'hit' : ''} ${fx.faint === 'e' || (E && E.hp <= 0) ? 'fainted' : ''} ${B.captured ? 'captured' : ''} ${fx.send === 'e' ? 'sendout' : ''} ${E?.shiny ? 'is-shiny' : ''} ${fx.sparkle ? 'sparkle' : ''}">
+      ${E ? monSprite(E, false) : ''}
     </div>
-    <div class="sprite-wrap player ${fx.hit === 'p' ? 'hit' : ''} ${fx.faint === 'p' || (P && P.hp <= 0) ? 'fainted' : ''} ${fx.send === 'p' ? 'sendout' : ''} ${P?.shiny ? 'is-shiny' : ''} ${fx.send === 'p' && P?.shiny ? 'sparkle' : ''}">
-      ${P ? `<img src="${spriteUrl(P.id, { back: true, shiny: P.shiny })}" alt="${esc(P.name)}" onerror="this.onerror=null;this.classList.add('flip');this.src='${spriteUrl(P.id, { shiny: P.shiny })}'">` : ''}
+    <div class="sprite-wrap player ${P?.dmax ? 'dmax' : ''} ${P?.tera ? 'tera' : ''} ${fx.hit === 'p' ? 'hit' : ''} ${fx.faint === 'p' || (P && P.hp <= 0) ? 'fainted' : ''} ${fx.send === 'p' ? 'sendout' : ''} ${P?.shiny ? 'is-shiny' : ''} ${fx.send === 'p' && P?.shiny ? 'sparkle' : ''}">
+      ${P ? monSprite(P, true) : ''}
     </div>
     <div class="hud player">
       <div class="row"><strong>${esc(P?.name)}${P?.shiny ? ' ✦' : ''}</strong><span>Lv ${P?.lv}</span></div>
-      <div class="hud-types">${P ? DEX[P.id].t.map(typeBadge).join('') : ''}</div>
+      <div class="hud-types">${P ? (P.t || DEX[P.id].t).map(typeBadge).join('') : ''}${formTag(P)}</div>
       ${P ? hpBar(P.hp, P.max) : ''}
       <div class="row small status-line"><span>${statusTag(P?.st)}</span><span>${P?.hp}/${P?.max}</span></div>
       <div class="expbar"><i style="width:${expPct}%"></i></div>
     </div>
   </div>`;
   const step = run.flow?.[0];
-  const inline = step && ['msg', 'learn'].includes(step.type) ? inlineFlow(step) : null;
+  const inline = step && ['msg', 'learn', 'reward'].includes(step.type) ? inlineFlow(step) : null;
   const text = inline ? inline.text : B.text;
   return `<section class="battle">
     ${scene}
@@ -132,8 +135,44 @@ function battleScreen() {
   </section>`;
 }
 
+/** Sprite for a battle view, using the Mega/Gigantamax form's sprite when it has one (falls back to the base sprite). */
+function monSprite(v, back) {
+  const ids = [...new Set([v.s, v.id].filter(Boolean))];
+  const urls = [];
+  for (const id of ids) {
+    if (back) urls.push([spriteUrl(id, { back: true, shiny: v.shiny }), false]);
+    urls.push([spriteUrl(id, { shiny: v.shiny }), back]);
+  }
+  const [first, ...rest] = urls;
+  const chain = JSON.stringify(rest).replace(/"/g, '&quot;');
+  return `<img src="${first[0]}" class="${first[1] ? 'flip' : ''}" alt="${esc(v.name)}" data-fallback="${chain}" onerror="nextSprite(this)">`;
+}
+window.nextSprite = img => {
+  const list = JSON.parse(img.dataset.fallback || '[]');
+  const next = list.shift();
+  if (!next) { img.onerror = null; return; }
+  img.dataset.fallback = JSON.stringify(list);
+  img.classList.toggle('flip', !!next[1]);
+  img.src = next[0];
+};
+const WEATHER_LABEL = { sun: '☀️ Harsh sunlight', rain: '🌧️ Rain', sand: '🌪️ Sandstorm', snow: '❄️ Snow' };
+const TERRAIN_LABEL = { electric: '⚡ Electric Terrain', grassy: '🌿 Grassy Terrain', psychic: '🔮 Psychic Terrain', misty: '🌫️ Misty Terrain' };
+function fieldChip(v) {
+  const parts = [v.weather && WEATHER_LABEL[v.weather], v.terrain && TERRAIN_LABEL[v.terrain]].filter(Boolean);
+  return parts.length ? `<div class="field-chip">${parts.join(' · ')}</div>` : '';
+}
+function formTag(v) {
+  if (!v) return '';
+  const tags = [];
+  if (v.form) tags.push(`<span class="form-tag mega">${esc(v.form.startsWith('Primal') ? 'PRIMAL' : 'MEGA')}</span>`);
+  if (v.dmax) tags.push(`<span class="form-tag dmax">${v.gmax ? 'G-MAX' : 'DYNAMAX'}</span>`);
+  if (v.tera) tags.push(`<span class="form-tag tera" style="--tc:${TYPE_COLORS[v.tera]}">TERA ${esc(v.tera.toUpperCase())}</span>`);
+  return tags.join('');
+}
+
 /** Post-battle messages and move-learning prompts, shown in the text box like the main games. */
 function inlineFlow(step) {
+  if (step.type === 'reward') return rewardPrompt(step);
   if (step.type === 'msg') {
     return { text: step.text, more: true, controls: '<div class="action-grid"><button class="primary" data-act="flowNext">Continue</button></div>' };
   }
@@ -156,12 +195,38 @@ function controls() {
     case 'fight': {
       if (b.pv.recharge || b.pv.charging) return `<div class="action-grid"><button data-act="bMove" data-arg="0">Continue</button></div>`;
       const noPP = P.moves.every(m => m.pp <= 0);
-      return `<div class="move-grid">${noPP ? `<button data-act="bMove" data-arg="-1">Struggle</button>` : P.moves.map((m, i) => {
-        const mv = MOVES[m.id];
-        const eff = mv.c === 'S' ? null : typeEffect(mv.t, DEX[E.id].t);
+      const gims = gimmickOptions(run);
+      if (B.gimmick && !gims.includes(B.gimmick)) B.gimmick = null;
+      const g = B.gimmick;
+      const dmax = !!P.bf?.dmax || g === 'dmax';
+      const zItem = ITEMS[P.item]?.kind === 'z' ? ITEMS[P.item] : null;
+      const lock = !P.bf?.dmax && b.pv.lock;
+      const vest = ITEMS[P.item]?.fx === 'assaultvest' && !P.bf?.dmax;
+      const gimRow = gims.length ? `<div class="gimmick-row">${gims.map(x => {
+        const label = x === 'dmax' && FORMS[P.id]?.gmax && P.gf ? 'Gigantamax' : x === 'tera' ? `Terastallize · ${teraType(P)}` : x === 'mega' ? 'Mega Evolve' : GIMMICK_NAMES[x];
+        return `<button class="gimmick g-${x} ${g === x ? 'active' : ''}" data-act="bGimmick" data-arg="${x}" aria-pressed="${g === x}">${esc(label)}</button>`;
+      }).join('')}</div>` : '';
+      const foeTypes = typesOf(E);
+      return `${gimRow}<div class="move-grid">${noPP ? `<button data-act="bMove" data-arg="-1">Struggle</button>` : P.moves.map((m, i) => {
+        const base = MOVES[m.id];
+        let mv = base, name = base.n, pow = base.c === 'S' ? 'Status' : `Pow ${base.p}`, off = m.pp <= 0;
+        if (dmax) {
+          if (base.c === 'S') { name = 'Max Guard'; pow = 'Protects'; }
+          else {
+            const gm = P.gf && FORMS[P.id]?.gmax?.mt === base.t ? FORMS[P.id].gmax.move : null;
+            name = gm || MAX_MOVES[base.t]?.[0] || 'Max Strike'; pow = `Pow ${base.mx || base.p}`;
+          }
+        } else if (g === 'z') {
+          if (base.t !== zItem?.type) off = true;
+          else if (base.c === 'S') name = `Z-${base.n}`;
+          else { name = Z_MOVES[base.t]; pow = `Pow ${base.z || base.p}`; }
+        }
+        if (lock && m.id !== lock) off = true;
+        if (vest && base.c === 'S') off = true;
+        const eff = base.c === 'S' ? null : typeEffect(base.t, foeTypes);
         const hint = eff == null ? '' : eff === 0 ? 'No effect' : eff > 1 ? 'Super effective' : eff < 1 ? 'Not very effective' : '';
-        return `<button class="move" style="--tc:${TYPE_COLORS[mv.t]}" data-act="bMove" data-arg="${i}" ${m.pp <= 0 ? 'disabled' : ''} title="${esc(mv.d || '')}">
-          <strong>${esc(mv.n)}</strong><span>${mv.t} · ${m.pp}/${mv.pp} PP</span><small>${mv.c === 'S' ? 'Status' : `Pow ${mv.p}`} ${hint ? '· ' + hint : ''}</small></button>`;
+        return `<button class="move ${name !== base.n ? 'transformed' : ''}" style="--tc:${TYPE_COLORS[mv.t]}" data-act="bMove" data-arg="${i}" ${off ? 'disabled' : ''} title="${esc(base.d || '')}">
+          <strong>${esc(name)}</strong><span>${mv.t} · ${m.pp}/${mv.pp} PP</span><small>${pow} ${hint ? '· ' + hint : ''}</small></button>`;
       }).join('')}</div><button class="ghost back-btn" data-act="bMode" data-arg="main">Back</button>`;
     }
     case 'bag': {
@@ -212,8 +277,9 @@ export function initBattleUI() {
     if (B.playing) playNext();
     else if (S.run?.flow?.[0]?.type === 'msg') document.querySelector('[data-act=flowNext]')?.click();
   },
-  bMode: m => { B.mode = m; render(); },
-  bMove: i => onBattleAction({ type: 'move', index: +i }),
+  bMode: m => { B.mode = m; if (m !== 'fight') B.gimmick = null; render(); },
+  bGimmick: g => { B.gimmick = B.gimmick === g ? null : g; render(); },
+  bMove: i => { const gimmick = B.gimmick; B.gimmick = null; onBattleAction({ type: 'move', index: +i, gimmick }); },
   bRun: () => onBattleAction({ type: 'run' }),
   bBall: name => onBattleAction({ type: 'ball', item: name }),
   bMed: name => { B.item = name; B.mode = 'target'; render(); },

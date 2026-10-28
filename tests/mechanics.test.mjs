@@ -1,14 +1,16 @@
 // Run with: node tests/mechanics.test.mjs
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { DEX, MOVES, LEARN, TYPES, BY_NAME } from '../public/js/data.js';
+import { DEX, MOVES, LEARN, TYPES, BY_NAME, FORMS } from '../public/js/data.js';
 const load = f => JSON.parse(readFileSync(new URL(`../public/data/${f}.json`, import.meta.url)));
-Object.assign(DEX, load('pokedex')); Object.assign(MOVES, load('moves')); Object.assign(LEARN, load('learnsets')); Object.assign(TYPES, load('types'));
+Object.assign(DEX, load('pokedex')); Object.assign(MOVES, load('moves')); Object.assign(LEARN, load('learnsets')); Object.assign(TYPES, load('types')); Object.assign(FORMS, load('forms'));
 for (const [id, s] of Object.entries(DEX)) { s.id = +id; BY_NAME[s.n.toLowerCase()] = +id; }
 
 const M = await import('../public/js/mechanics.js');
 const G = await import('../public/js/game.js');
 const Bt = await import('../public/js/battle.js');
+const C = await import('../public/js/content.js');
+C.registerFormItems(FORMS, DEX);
 
 // Stat formula — Bulbapedia's Garchomp example (Lv 78, Adamant)
 const chomp = { id: 445, lv: 78, nat: M.NATURES.indexOf('Adamant'), iv: [24, 12, 30, 16, 23, 5], ev: [74, 190, 91, 48, 84, 23] };
@@ -99,6 +101,9 @@ for (let r = 0; r < 300; r++) {
   run.act = 1 + (r % 3);
   const node = { type: kinds[r % kinds.length], r: r % 11 };
   try {
+    for (const k of Object.keys(C.KEY_ITEMS)) run.bag[k] = 1;
+    const heldPool = Object.keys(C.ITEMS).filter(k => C.HELD_KINDS.includes(C.ITEMS[k].kind));
+    run.party.forEach(m => { if (Math.random() < 0.7) m.item = heldPool[Math.floor(Math.random() * heldPool.length)]; });
     const spec = G.applyDifficulty(run, G.buildEncounter(run, node));
     Bt.startBattle(run, spec);
     for (let t = 0; t < 300 && !run.battle.over; t++) {
@@ -109,10 +114,10 @@ for (let r = 0; r < 300; r++) {
       if (roll < 0.05 && b.canCatch) { run.bag['Ultra Ball'] = 5; Bt.playerAction(run, { type: 'ball', item: 'Ultra Ball' }); }
       else if (roll < 0.08) { run.bag['Potion'] = 3; Bt.playerAction(run, { type: 'item', item: 'Potion', target: b.pi }); }
       else if (roll < 0.1 && run.party.filter(m => m.hp > 0).length > 1) Bt.playerAction(run, { type: 'switch', index: run.party.findIndex((m, i) => m.hp > 0 && i !== b.pi) });
-      else Bt.playerAction(run, { type: 'move', index: Math.floor(Math.random() * P.moves.length) });
+      else { const gs = Bt.gimmickOptions(run); Bt.playerAction(run, { type: 'move', index: Math.floor(Math.random() * P.moves.length), gimmick: Math.random() < 0.3 ? gs[Math.floor(Math.random() * gs.length)] : null }); }
       turns++;
       for (const m of [...run.party, ...b.enemy]) {
-        assert.ok(Number.isInteger(m.hp) && m.hp >= 0 && m.hp <= M.maxHp(m), `bad hp ${m.hp} for ${DEX[m.id].n}`);
+        assert.ok(Number.isInteger(m.hp) && m.hp >= 0 && m.hp <= M.maxHp(m), `bad hp ${m.hp}/${M.maxHp(m)} for ${DEX[m.id].n} ${JSON.stringify(m.bf)} ${m.item} ${node.type}`);
       }
       b.learnQueue = [];
     }
@@ -257,3 +262,75 @@ for (let i = 0; i < 200; i++) {
   for (const n of nodes) if (n.id !== 'boss') assert.ok(n.next.length > 0, 'dead end ' + n.id);
 }
 console.log(`All mechanics tests passed (${turns} simulated battle turns).`);
+
+// ---------- Battle gimmicks ----------
+{
+  const mk = (id, lv, moves) => { const m = M.createMon(id, lv, { moves }); m.iv = [31, 31, 31, 31, 31, 31]; m.hp = M.maxHp(m); return m; };
+  const setup = (p, e, bag = {}) => {
+    const run = G.newRun(1, 'medium', 'random');
+    run.party = [p]; run.bag = { ...bag };
+    Bt.startBattle(run, { kind: 'trainer', enemy: [e], ai: 0, trainer: { name: 'T', title: 'Ace', sprite: 'red', prize: 0 } });
+    return run;
+  };
+  // Mega Evolution: Charizard + Charizardite Y + Mega Bracelet -> Fire/Flying, Drought sets sun
+  const zard = mk(6, 50, ['flamethrower']); zard.item = 'Charizardite Y';
+  let run = setup(zard, mk(143, 50, ['splash']), { 'Mega Bracelet': 1 });
+  assert.ok(Bt.gimmickOptions(run).includes('mega'), 'mega offered');
+  const ev = Bt.playerAction(run, { type: 'move', index: 0, gimmick: 'mega' });
+  assert.equal(zard.bf.n, 'Mega Charizard Y');
+  assert.equal(zard.ab, 'Drought');
+  assert.equal(run.battle.weather?.kind, 'sun');
+  assert.ok(ev.some(e => /Mega Evolved/.test(e.text)));
+  assert.deepEqual(Bt.gimmickOptions(run), [], 'one gimmick per battle');
+  Bt.clearBattleForm(zard);
+  assert.equal(zard.bf, undefined); assert.notEqual(zard.ab, 'Drought');
+
+  // Dynamax: HP doubles, Max Moves, back to normal after three turns
+  const lap = mk(131, 50, ['icebeam', 'protect']);
+  run = setup(lap, mk(242, 100, ['splash']), { 'Dynamax Band': 1 });
+  const hp0 = lap.hp, max0 = M.maxHp(lap);
+  Bt.playerAction(run, { type: 'move', index: 0, gimmick: 'dmax' });
+  assert.equal(M.maxHp(lap), max0 * 2);
+  assert.ok(lap.hp > hp0);
+  const t2 = Bt.playerAction(run, { type: 'move', index: 0 });
+  assert.ok(t2.some(e => /Max Hailstorm/.test(e.text)), 'Max Move used');
+  assert.equal(run.battle.weather?.kind, 'snow');
+  Bt.playerAction(run, { type: 'move', index: 1 });
+  assert.equal(lap.bf, undefined, 'Dynamax ends after 3 turns');
+  assert.ok(lap.hp <= M.maxHp(lap));
+
+  // Terastallization: defensive type changes, STAB 2x when Tera Type matches
+  const pik = mk(25, 50, ['thunderbolt']); pik.tt = 'Electric';
+  run = setup(pik, mk(143, 50, ['splash']), { 'Tera Orb': 1 });
+  Bt.playerAction(run, { type: 'move', index: 0, gimmick: 'tera' });
+  assert.deepEqual(M.typesOf(pik), ['Electric']);
+  const gyr = mk(130, 50, ['splash']); gyr.tt = 'Steel'; gyr.bf = { tera: 'Steel' };
+  assert.deepEqual(M.typesOf(gyr), ['Steel']);
+
+  // Z-Move with a Z-Crystal and Z-Ring
+  const ray = mk(26, 50, ['thunderbolt']); ray.item = 'Electrium Z';
+  run = setup(ray, mk(143, 100, ['splash']), { 'Z-Ring': 1 });
+  assert.ok(Bt.gimmickOptions(run).includes('z'));
+  const zt = Bt.playerAction(run, { type: 'move', index: 0, gimmick: 'z' });
+  assert.ok(zt.some(e => /Gigavolt Havoc/.test(e.text)), 'Z-Move used');
+
+  // Held items: Leftovers heal, Focus Sash survives
+  const snor = mk(143, 50, ['splash']); snor.item = 'Leftovers'; snor.hp = 10;
+  run = setup(snor, mk(129, 5, ['splash']));
+  Bt.playerAction(run, { type: 'move', index: 0 });
+  assert.ok(snor.hp > 10, 'Leftovers healed');
+  const sash = mk(129, 5, ['splash']); sash.item = 'Focus Sash';
+  run = setup(mk(150, 100, ['psychic']), sash);
+  Bt.playerAction(run, { type: 'move', index: 0 });
+  assert.equal(sash.hp, 1, 'Focus Sash');
+
+  // Rewards: three options, held items only for held kinds
+  const r2 = G.newRun(4, 'medium', 'random');
+  for (let i = 0; i < 50; i++) {
+    const opts = G.generateRewards(r2, i % 2 ? 'gym' : 'wild');
+    assert.equal(opts.length, 3);
+    assert.equal(new Set(opts.map(o => o.item)).size, 3);
+    for (const o of opts) assert.ok(C.ITEMS[o.item], 'reward item exists: ' + o.item);
+  }
+}
+console.log('Battle gimmick, held item and reward tests passed.');

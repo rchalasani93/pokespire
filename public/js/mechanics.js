@@ -61,14 +61,20 @@ export function expYield(defeated, receiverLevel, { trainer = false, share = fal
 
 // ---------- Stats ----------
 export function calcStats(mon) {
-  const base = DEX[mon.id].b;
+  // A battle form (Mega Evolution, Primal Reversion) brings its own base stats
+  const base = mon.bf?.b || DEX[mon.id].b;
   return base.map((b, i) => {
     const core = Math.floor((2 * b + mon.iv[i] + Math.floor(mon.ev[i] / 4)) * mon.lv / 100);
     if (i === 0) return mon.id === 292 ? 1 : core + mon.lv + 10; // Shedinja always has 1 HP
     return Math.floor((core + 5) * natureMod(mon.nat, i));
   });
 }
-export const maxHp = mon => calcStats(mon)[0];
+// Dynamax doubles HP (Dynamax Level 10)
+export const maxHp = mon => calcStats(mon)[0] * (mon.bf?.dmax ? 2 : 1);
+/** Types in battle: Terastallized Pokémon have only their Tera Type defensively. */
+export const typesOf = mon => (mon.bf?.tera ? [mon.bf.tera] : mon.bf?.t || DEX[mon.id].t);
+/** Tera Type: one of the species' own types unless changed with a Tera Shard. */
+export const teraType = mon => mon.tt || DEX[mon.id].t[0];
 
 export function addEvs(mon, defeatedId) {
   const y = DEX[defeatedId].ev;
@@ -90,6 +96,7 @@ export function createMon(id, lv, { perfectIvs = 0, moves = null, shinyOdds = 40
     uid: uid(), id, lv, exp: expForLevel(sp.gr, lv), nat: rand(25), iv, ev: [0, 0, 0, 0, 0, 0],
     st: null, sl: 0, fr: sp.bh, shiny: rand(shinyOdds) === 0,
     ab: Math.random() < 0.05 && sp.h ? sp.h : pick(sp.a),
+    tt: pick(sp.t),
     moves: (moves || movesAtLevel(id, lv)).map(m => ({ id: m, pp: MOVES[m].pp })),
   };
   mon.hp = maxHp(mon);

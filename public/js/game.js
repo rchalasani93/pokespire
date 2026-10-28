@@ -1,8 +1,9 @@
 // Run structure: three acts of branching map nodes, encounters, rewards and progression.
-import { DEX, MOVES, REGIONS, idOf, movesAtLevel, regionOf } from './data.js';
-import { createMon, stageForLevel, healMon, rand, pick, uid, maxHp, expForLevel } from './mechanics.js';
+import { DEX, MOVES, FORMS, REGIONS, idOf, movesAtLevel, regionOf } from './data.js';
+import { createMon, stageForLevel, healMon, rand, pick, uid, maxHp, expForLevel, evoItemFor } from './mechanics.js';
 import {
   ITEMS, DIFFICULTIES, diffOf, CLASSIC, GAME_MODES, modeOf, TRAINER_CLASSES, TRAINER_NAMES, GYM_LEADERS, VILLAINS, ELITE_FOUR, CHAMPIONS, STONE_LIST, EVO_ITEM_LIST,
+  TYPE_BOOSTERS, Z_CRYSTALS, KEY_ITEMS, TYPE_LIST, MINT_NATURES,
 } from './content.js';
 
 export const ACTS = [
@@ -404,6 +405,7 @@ export function applyDifficulty(run, spec) {
     }
     m.hp = maxHp(m);
   }
+  equipEnemies(run, spec);
   if (trainer) {
     if (d.ai === 'basic') spec.ai = Math.min(spec.ai ?? 1, 1);
     if (d.ai === 'smart') spec.ai = 2;
@@ -419,6 +421,133 @@ export function applyDifficulty(run, spec) {
 }
 
 export function healParty(run) { run.party.forEach(healMon); }
+
+// ---------- Opponents' held items and battle gimmicks ----------
+const BOSS_KINDS = ['gym', 'villainBoss', 'e4', 'champion'];
+const megaStoneOf = id => (FORMS[id]?.mega || []).find(f => f.kind === 'mega' && f.item)?.item || null;
+
+function equipEnemies(run, spec) {
+  const d = run.difficulty || 'medium';
+  // Wild Pokémon that can Gigantamax sometimes have the Gigantamax Factor (Elite Pokémon always do)
+  if (!spec.trainer) {
+    for (const m of spec.enemy) if (FORMS[m.id]?.gmax && (spec.kind === 'elite' || Math.random() < 0.1)) m.gf = true;
+    return;
+  }
+  // Trainers on Hard and Hell carry items
+  const itemChance = { easy: 0, medium: 0.1, hard: 0.3, hell: 0.6 }[d] ?? 0.1;
+  for (const m of spec.enemy) {
+    if (Math.random() < itemChance) m.item = pick(['Sitrus Berry', 'Leftovers', 'Lum Berry', TYPE_BOOSTERS[DEX[m.id].t[0]]]);
+  }
+  if (!BOSS_KINDS.includes(spec.kind)) return;
+  // Bosses use one gimmick on their ace, like the main games' Gym Leaders and Champions
+  const ace = spec.enemy.reduce((a, m) => (m.lv >= a.lv ? m : a), spec.enemy[0]);
+  const type = spec.trainer.type;
+  const megaMon = spec.enemy.find(m => megaStoneOf(m.id));
+  let g;
+  if ((spec.kind === 'champion' || spec.kind === 'villainBoss') && megaMon) {
+    megaMon.item = megaStoneOf(megaMon.id); megaMon.gim = 'mega'; g = 'mega';
+  } else if (spec.kind === 'gym') {
+    g = Math.random() < 0.6 ? 'tera' : 'dmax';
+  } else if (spec.kind === 'e4') {
+    g = Math.random() < 0.5 ? 'tera' : 'z';
+  } else {
+    g = pick(['dmax', 'tera', 'z']);
+  }
+  if (g !== 'mega') {
+    ace.gim = g;
+    if (g === 'tera') ace.tt = type && TYPE_LIST.includes(type) ? type : DEX[ace.id].t[0];
+    if (g === 'z') {
+      const dmg = ace.moves.map(x => MOVES[x.id]).filter(mv => mv.c !== 'S');
+      const zt = (type && dmg.some(mv => mv.t === type)) ? type : (dmg.sort((a, b) => b.p - a.p)[0]?.t || DEX[ace.id].t[0]);
+      ace.item = Z_CRYSTALS[zt];
+    }
+    if (g === 'dmax' && FORMS[ace.id]?.gmax) ace.gf = true;
+    if (!ace.item && d !== 'easy') ace.item = 'Sitrus Berry';
+  }
+}
+
+// ---------- Rewards after battle (PokéRogue style: pick one of three) ----------
+const TIERS = ['common', 'great', 'ultra', 'rogue', 'master'];
+export const TIER_COLORS = { common: '#cfd8e3', great: '#4aa3ff', ultra: '#f2c94c', rogue: '#eb5757', master: '#c77dff' };
+const HELD_ULTRA = ['Leftovers', 'Shell Bell', 'Life Orb', 'Choice Band', 'Choice Specs', 'Choice Scarf', 'Expert Belt', 'Scope Lens', 'Quick Claw', 'Focus Band', 'Muscle Band', 'Wise Glasses', 'Assault Vest', 'Rocky Helmet', 'White Herb', 'Lucky Egg', 'Amulet Coin'];
+
+const ownsItem = (run, item) => (run.bag[item] || 0) > 0 || [...run.party, ...run.box].some(m => m.item === item);
+const partyMoveTypes = run => [...new Set(run.party.flatMap(m => m.moves.map(x => MOVES[x.id]).filter(mv => mv.c !== 'S').map(mv => mv.t)))];
+
+/** Evolution items that would evolve someone on the team. */
+function usefulEvoItems(run) {
+  const out = new Set();
+  for (const m of run.party) for (const e of DEX[m.id].e || []) {
+    const it = evoItemFor(e);
+    if (it && ITEMS[it]) out.add(it);
+  }
+  return [...out];
+}
+
+function rewardPool(run, tier) {
+  const pool = [];
+  const hell = diffOf(run).permadeath;
+  const add = (item, qty = 1, w = 1) => { if (ITEMS[item] && !(hell && ITEMS[item].kind === 'revive')) pool.push({ item, qty, w }); };
+  const types = partyMoveTypes(run);
+  const hasNFE = run.party.some(m => DEX[m.id].e?.length);
+  if (tier === 'common') {
+    add('Poké Ball', 5, 3); add('Potion', 3, 2); add('Super Potion', 2); add('Full Heal', 2); add('Oran Berry', 1);
+    add('Exp. Candy S', 2); add('Revive', 1);
+  } else if (tier === 'great') {
+    add('Great Ball', 5, 3); add('Hyper Potion', 2, 2); add('Revive', 2); add('Elixir', 2); add('Rare Candy', 1, 2); add('Exp. Candy M', 2);
+    add('Sitrus Berry', 1, 2); add('Lum Berry', 1);
+    for (const it of usefulEvoItems(run)) add(it, 1, 2);
+    if (types.length) add(TYPE_BOOSTERS[pick(types)], 1, 2);
+    add(pick(['HP Up', 'Protein', 'Iron', 'Calcium', 'Zinc', 'Carbos']), 2);
+    add(`${pick(MINT_NATURES)} Mint`, 1);
+    if (run.bag['Tera Orb']) add(`${pick(types.length ? types : TYPE_LIST)} Tera Shard`, 1, 2);
+    add('Nugget', 1);
+  } else if (tier === 'ultra') {
+    add('Ultra Ball', 5, 3); add('Max Revive', 1); add('Full Restore', 2); add('Max Elixir', 1); add('Rare Candy', 3); add('Exp. Candy L', 1);
+    for (const h of HELD_ULTRA) add(h, 1, 0.6);
+    if (hasNFE) add('Eviolite', 1);
+    add('Bottle Cap', 1); add('Ability Capsule', 1);
+    // Battle gimmicks the team can use
+    if (run.bag['Mega Bracelet']) for (const m of run.party) { const st = megaStoneOf(m.id); if (st && !ownsItem(run, st)) add(st, 1, 3); }
+    for (const m of run.party) for (const f of FORMS[m.id]?.mega || []) if (f.kind === 'primal' && !ownsItem(run, f.item)) add(f.item, 1, 3);
+    if (run.bag['Z-Ring'] && types.length) add(Z_CRYSTALS[pick(types)], 1, 2);
+    if (run.bag['Dynamax Band'] && run.party.some(m => FORMS[m.id]?.gmax && !m.gf)) add('Max Mushrooms', 1, 2);
+    for (const k of Object.keys(KEY_ITEMS)) if (!run.bag[k]) add(k, 1, 1.5);
+    add('Big Nugget', 1, 0.5);
+  } else if (tier === 'rogue') {
+    add('Focus Sash', 1); add('Gold Bottle Cap', 1); add('Ability Patch', 1); add('Exp. Candy L', 3);
+    for (const k of Object.keys(KEY_ITEMS)) if (!run.bag[k]) add(k, 1, 3);
+    if (run.bag['Mega Bracelet']) for (const m of run.party) { const st = megaStoneOf(m.id); if (st && !ownsItem(run, st)) add(st, 1, 3); }
+  } else {
+    add('Master Ball', 1);
+  }
+  return pool;
+}
+
+function rollTier(boss) {
+  const r = Math.random() * 100;
+  let t = r < 2.5 ? 3 : r < 14 ? 2 : r < 45 ? 1 : 0;
+  if (boss) t++;
+  if (t === 3 && Math.random() < 0.08) t = 4;
+  return TIERS[Math.min(4, t)];
+}
+
+/** Three reward options after a battle; bosses and Elite/Legendary Pokémon roll a tier higher. */
+export function generateRewards(run, kind) {
+  const boss = ['gym', 'villainBoss', 'e4', 'champion', 'elite', 'legendary'].includes(kind);
+  const out = [];
+  for (let i = 0; i < 30 && out.length < 3; i++) {
+    const tier = rollTier(boss && (i === 0 || Math.random() < 0.4));
+    const pool = rewardPool(run, tier).filter(o => !out.some(x => x.item === o.item));
+    if (!pool.length) continue;
+    const total = pool.reduce((a, o) => a + o.w, 0);
+    let r = Math.random() * total;
+    const o = pool.find(x => (r -= x.w) < 0) || pool[0];
+    out.push({ item: o.item, qty: o.qty, tier });
+  }
+  return out;
+}
+export const rerollCost = (run, n) => Math.round(30 * (n + 1) * run.act * diffOf(run).priceMult);
 
 /** Add a caught Pokémon to the party (or the Box when the party is full). */
 export function storeCaught(run, mon) {

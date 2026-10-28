@@ -478,3 +478,41 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
 #topbar-user { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .learn-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
 .learn-actions button { padding: 12px; }
+
+/* Battle gimmicks and field */
+.gimmick-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.gimmick { flex: 1; font-weight: 700; font-size: .85rem; padding: 8px 10px; border-width: 2px; }
+.gimmick.g-mega { border-color: #c77dff; }
+.gimmick.g-z { border-color: #f2c94c; }
+.gimmick.g-dmax { border-color: #ff3b6b; }
+.gimmick.g-tera { border-color: #4dd8ff; }
+.gimmick.active { color: #111; }
+.gimmick.g-mega.active { background: #c77dff; } .gimmick.g-z.active { background: #f2c94c; } .gimmick.g-dmax.active { background: #ff3b6b; color: #fff; } .gimmick.g-tera.active { background: #4dd8ff; }
+.move.transformed strong { color: #ffe08a; }
+.form-tag { font-size: .58rem; font-weight: 800; padding: 1px 5px; border-radius: 4px; margin-left: 3px; letter-spacing: .03em; align-self: center; }
+.form-tag.mega { background: #c77dff; color: #fff; }
+.form-tag.dmax { background: #ff3b6b; color: #fff; }
+.form-tag.tera { background: linear-gradient(135deg, #fff, var(--tc)); color: #111; }
+.field-chip { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); background: #000a; color: #fff; font-size: .72rem; padding: 3px 10px; border-radius: 999px; z-index: 3; white-space: nowrap; }
+.sprite-wrap.dmax img { transform: scale(1.3); transform-origin: bottom center; filter: drop-shadow(0 0 10px #ff2a5f) drop-shadow(0 0 22px #ff2a5f88); }
+.sprite-wrap.player.dmax img { transform: scale(1.12); }
+.sprite-wrap.dmax img.flip { transform: scale(-1.3, 1.3); }
+.sprite-wrap.player.dmax img.flip { transform: scale(-1.12, 1.12); }
+.scene .hud.player { z-index: 2; }
+.sprite-wrap.tera img { filter: drop-shadow(0 0 6px #9ff) saturate(1.3) brightness(1.1); }
+.sprite-wrap.tera::after { content: "💎"; position: absolute; top: 0; left: 50%; font-size: 22px; animation: twinkle 1.6s infinite; }
+
+/* Rewards after battle */
+.reward-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+.reward-card { display: flex; flex-direction: column; align-items: center; gap: 3px; text-align: center; padding: 10px 6px; border: 2px solid var(--tier); position: relative; min-height: 150px; }
+.reward-card .tier { font-size: .62rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--tier); }
+.reward-card .item-icon { width: 40px; height: 40px; image-rendering: pixelated; }
+.reward-card strong { font-size: .88rem; line-height: 1.2; }
+.reward-card small { font-size: .68rem; color: var(--muted); line-height: 1.25; }
+.reward-card.tier-ultra, .reward-card.tier-rogue, .reward-card.tier-master { box-shadow: 0 0 12px color-mix(in srgb, var(--tier) 45%, transparent); }
+.held-tag { font-size: .6rem; background: #ffffff1a; border-radius: 4px; padding: 1px 5px; }
+.reward-targets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.reward-target { display: flex; gap: 6px; align-items: center; text-align: left; padding: 6px 8px; }
+.reward-target .mini-sprite { width: 44px; height: 44px; }
+.held-icon .item-icon { width: 18px; height: 18px; vertical-align: middle; }
+@media (max-width: 520px) { .reward-card small { display: none; } .reward-card { min-height: 0; } .reward-targets { grid-template-columns: 1fr; } }

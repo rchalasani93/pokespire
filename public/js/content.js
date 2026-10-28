@@ -59,6 +59,102 @@ for (const [name, slug] of Object.entries(EVO_ITEMS)) {
   ITEMS[name] = { kind: 'evo', price: STONES.includes(name) ? 300 : 500, slug, desc: 'Makes certain Pokémon evolve.' };
 }
 export const STONE_LIST = STONES;
+
+// ---------- Held items (one per Pokémon; `fx` is what the battle engine looks for) ----------
+const HELD = {
+  'Leftovers': ['leftovers', 'leftovers', 'Restores 1/16 of max HP at the end of every turn.'],
+  'Shell Bell': ['shellbell', 'shell-bell', 'Restores HP equal to 1/8 of the damage the holder deals.'],
+  'Life Orb': ['lifeorb', 'life-orb', 'Boosts moves by 30%, but the holder loses 1/10 of its max HP after attacking.'],
+  'Choice Band': ['choiceband', 'choice-band', 'Boosts Attack by 50%, but the holder can only use the first move it picks.'],
+  'Choice Specs': ['choicespecs', 'choice-specs', 'Boosts Sp. Atk by 50%, but the holder can only use the first move it picks.'],
+  'Choice Scarf': ['choicescarf', 'choice-scarf', 'Boosts Speed by 50%, but the holder can only use the first move it picks.'],
+  'Focus Sash': ['focussash', 'focus-sash', 'At full HP, the holder survives a hit that would KO it with 1 HP. Single use.'],
+  'Focus Band': ['focusband', 'focus-band', '10% chance to survive a hit that would KO the holder, with 1 HP.'],
+  'Quick Claw': ['quickclaw', 'quick-claw', '20% chance for the holder to move first among moves of the same priority.'],
+  'Scope Lens': ['scopelens', 'scope-lens', 'Raises the holder\'s critical-hit ratio by one stage.'],
+  'Expert Belt': ['expertbelt', 'expert-belt', 'Super-effective moves do 20% more damage.'],
+  'Muscle Band': ['muscleband', 'muscle-band', 'Physical moves do 10% more damage.'],
+  'Wise Glasses': ['wiseglasses', 'wise-glasses', 'Special moves do 10% more damage.'],
+  'Assault Vest': ['assaultvest', 'assault-vest', 'Raises Sp. Def by 50%, but the holder can\'t use status moves.'],
+  'Eviolite': ['eviolite', 'eviolite', 'Raises Defense and Sp. Def by 50% if the holder can still evolve.'],
+  'Rocky Helmet': ['rockyhelmet', 'rocky-helmet', 'Attackers that make contact lose 1/6 of their max HP.'],
+  'White Herb': ['whiteherb', 'white-herb', 'Restores the holder\'s lowered stats. Single use.'],
+  'Lucky Egg': ['luckyegg', 'lucky-egg', 'The holder gets 50% more Exp. Points.'],
+  'Amulet Coin': ['amuletcoin', 'amulet-coin', 'Doubles prize money if the holder is on your team.'],
+  'Oran Berry': ['oran', 'oran-berry', 'Restores 10 HP when the holder\'s HP drops to half or less. Single use.'],
+  'Sitrus Berry': ['sitrus', 'sitrus-berry', 'Restores 1/4 of max HP when the holder\'s HP drops to half or less. Single use.'],
+  'Lum Berry': ['lum', 'lum-berry', 'Cures any status condition. Single use.'],
+};
+for (const [name, [fx, slug, desc]] of Object.entries(HELD)) ITEMS[name] = { kind: 'held', fx, price: 0, slug, desc };
+// Type-boosting held items (×1.2)
+export const TYPE_BOOSTERS = {
+  Normal: 'Silk Scarf', Fire: 'Charcoal', Water: 'Mystic Water', Grass: 'Miracle Seed', Electric: 'Magnet', Ice: 'Never-Melt Ice',
+  Fighting: 'Black Belt', Poison: 'Poison Barb', Ground: 'Soft Sand', Flying: 'Sharp Beak', Psychic: 'Twisted Spoon', Bug: 'Silver Powder',
+  Rock: 'Hard Stone', Ghost: 'Spell Tag', Dragon: 'Dragon Fang', Dark: 'Black Glasses', Steel: 'Iron Plate', Fairy: 'Fairy Feather',
+};
+for (const [type, name] of Object.entries(TYPE_BOOSTERS)) {
+  ITEMS[name] = { kind: 'held', fx: 'boost', type, price: 0, slug: name.toLowerCase().replace(/ /g, '-'), desc: `Boosts ${type}-type moves by 20%.` };
+}
+export const HELD_KINDS = ['held', 'mega', 'z'];
+
+// ---------- Battle gimmicks ----------
+export const KEY_ITEMS = {
+  'Mega Bracelet': { gimmick: 'mega', slug: 'mega-bracelet', desc: 'Lets a Pokémon holding its Mega Stone Mega Evolve in battle (once per battle).' },
+  'Z-Ring': { gimmick: 'z', slug: 'z-ring', desc: 'Lets a Pokémon holding a Z-Crystal unleash a Z-Move (once per battle).' },
+  'Dynamax Band': { gimmick: 'dmax', slug: 'dynamax-band', desc: 'Lets a Pokémon Dynamax for three turns (once per battle).' },
+  'Tera Orb': { gimmick: 'tera', slug: 'tera-orb', desc: 'Lets a Pokémon Terastallize into its Tera Type (once per battle).' },
+};
+for (const [name, k] of Object.entries(KEY_ITEMS)) ITEMS[name] = { kind: 'key', price: 0, ...k };
+export const GIMMICK_KEY = Object.fromEntries(Object.entries(KEY_ITEMS).map(([n, k]) => [k.gimmick, n]));
+export const GIMMICK_NAMES = { mega: 'Mega Evolution', z: 'Z-Move', dmax: 'Dynamax', tera: 'Terastallize' };
+
+export const Z_CRYSTALS = {
+  Normal: 'Normalium Z', Fire: 'Firium Z', Water: 'Waterium Z', Electric: 'Electrium Z', Grass: 'Grassium Z', Ice: 'Icium Z',
+  Fighting: 'Fightinium Z', Poison: 'Poisonium Z', Ground: 'Groundium Z', Flying: 'Flyinium Z', Psychic: 'Psychium Z', Bug: 'Buginium Z',
+  Rock: 'Rockium Z', Ghost: 'Ghostium Z', Dragon: 'Dragonium Z', Dark: 'Darkinium Z', Steel: 'Steelium Z', Fairy: 'Fairium Z',
+};
+export const Z_MOVES = {
+  Normal: 'Breakneck Blitz', Fire: 'Inferno Overdrive', Water: 'Hydro Vortex', Electric: 'Gigavolt Havoc', Grass: 'Bloom Doom',
+  Ice: 'Subzero Slammer', Fighting: 'All-Out Pummeling', Poison: 'Acid Downpour', Ground: 'Tectonic Rage', Flying: 'Supersonic Skystrike',
+  Psychic: 'Shattered Psyche', Bug: 'Savage Spin-Out', Rock: 'Continental Crush', Ghost: 'Never-Ending Nightmare', Dragon: 'Devastating Drake',
+  Dark: 'Black Hole Eclipse', Steel: 'Corkscrew Crash', Fairy: 'Twinkle Tackle',
+};
+for (const [type, name] of Object.entries(Z_CRYSTALS)) {
+  ITEMS[name] = { kind: 'z', type, price: 0, slug: name.toLowerCase().replace(/ /g, '-') + '--held', desc: `Hold it to turn ${type}-type moves into the Z-Move ${Z_MOVES[type]}.` };
+}
+// Max Moves by type, with what they do besides damage (Gen 8)
+export const MAX_MOVES = {
+  Normal: ['Max Strike', { foe: { spe: -1 } }], Fire: ['Max Flare', { weather: 'sun' }], Water: ['Max Geyser', { weather: 'rain' }],
+  Electric: ['Max Lightning', { terrain: 'electric' }], Grass: ['Max Overgrowth', { terrain: 'grassy' }], Ice: ['Max Hailstorm', { weather: 'snow' }],
+  Fighting: ['Max Knuckle', { self: { atk: 1 } }], Poison: ['Max Ooze', { self: { spa: 1 } }], Ground: ['Max Quake', { self: { spd: 1 } }],
+  Flying: ['Max Airstream', { self: { spe: 1 } }], Psychic: ['Max Mindstorm', { terrain: 'psychic' }], Bug: ['Max Flutterby', { foe: { spa: -1 } }],
+  Rock: ['Max Rockfall', { weather: 'sand' }], Ghost: ['Max Phantasm', { foe: { def: -1 } }], Dragon: ['Max Wyrmwind', { foe: { atk: -1 } }],
+  Dark: ['Max Darkness', { foe: { spd: -1 } }], Steel: ['Max Steelspike', { self: { def: 1 } }], Fairy: ['Max Starfall', { terrain: 'misty' }],
+};
+export const TYPE_LIST = Object.keys(Z_CRYSTALS);
+for (const type of TYPE_LIST) {
+  ITEMS[`${type} Tera Shard`] = { kind: 'terashard', type, price: 0, slug: `${type.toLowerCase()}-tera-shard`, desc: `Changes a Pokémon's Tera Type to ${type}.` };
+}
+ITEMS['Max Mushrooms'] = { kind: 'gmaxfactor', price: 0, slug: 'max-mushrooms', desc: 'Gives a Pokémon that can Gigantamax the Gigantamax Factor.' };
+ITEMS['Ability Capsule'] = { kind: 'capsule', price: 0, slug: 'ability-capsule', desc: 'Switches a Pokémon between its two regular Abilities.' };
+ITEMS['Ability Patch'] = { kind: 'patch', price: 0, slug: 'ability-patch', desc: 'Changes a Pokémon\'s Ability to its Hidden Ability.' };
+ITEMS['Nugget'] = { kind: 'valuable', value: 500, price: 0, slug: 'nugget', desc: 'Sells for $500. Use it from the Bag to get the money.' };
+ITEMS['Big Nugget'] = { kind: 'valuable', value: 2000, price: 0, slug: 'big-nugget', desc: 'Sells for $2,000. Use it from the Bag to get the money.' };
+export const MINT_NATURES = ['Lonely', 'Adamant', 'Naughty', 'Brave', 'Bold', 'Impish', 'Lax', 'Relaxed', 'Modest', 'Mild', 'Rash', 'Quiet', 'Calm', 'Gentle', 'Careful', 'Sassy', 'Timid', 'Hasty', 'Jolly', 'Naive', 'Serious'];
+for (const n of MINT_NATURES) ITEMS[`${n} Mint`] = { kind: 'mint', nature: n, price: 0, slug: `${n.toLowerCase()}-mint`, desc: `Changes a Pokémon's stats to match the ${n} nature.` };
+
+/** Mega Stones and the Primal orbs come from the form data, so they're added after it loads. */
+export function registerFormItems(FORMS, DEX) {
+  for (const [id, f] of Object.entries(FORMS)) {
+    for (const m of f.mega || []) {
+      if (!m.item || ITEMS[m.item]) continue;
+      ITEMS[m.item] = {
+        kind: 'mega', species: +id, price: 0, slug: m.item.toLowerCase().replace(/ /g, '-'),
+        desc: m.kind === 'primal' ? `${DEX[id].n} holding it undergoes Primal Reversion when it enters battle.` : `Lets ${DEX[id].n} Mega Evolve into ${m.n} (needs a Mega Bracelet).`,
+      };
+    }
+  }
+}
 export const EVO_ITEM_LIST = Object.keys(EVO_ITEMS);
 
 // ---------- Difficulty modes ----------
@@ -105,7 +201,10 @@ export const BAG_POCKETS = [
   ['Poké Balls', ['ball']],
   ['Medicine', ['heal', 'revive', 'status', 'pp']],
   ['Training', ['candy', 'expcandy', 'vitamin', 'cap']],
-  ['Evolution', ['evo']],
+  ['Evolution', ['evo', 'gmaxfactor']],
+  ['Held items', ['held', 'mega', 'z']],
+  ['Other', ['terashard', 'mint', 'capsule', 'patch', 'valuable']],
+  ['Key items', ['key']],
 ];
 
 // ---------- Trainer classes for random trainer battles ----------

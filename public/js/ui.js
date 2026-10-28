@@ -1,17 +1,19 @@
 // Screens, overlays and player flows (everything except the battle screen).
 import { S, defaultProfile, normalizeProfile } from './state.js';
 import { api, configured, saveRun, saveProfile, flushSaves, cancelRunSave, joinPresence, leavePresence } from './api.js';
-import { DEX, MOVES, LEARN, REGIONS, ABILITIES, regionOf, familyRoot, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS, movesAtLevel } from './data.js';
+import { FORMS, DEX, MOVES, LEARN, REGIONS, ABILITIES, regionOf, familyRoot, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS, movesAtLevel } from './data.js';
 import {
   createMon, calcStats, maxHp, monName, NATURES, STAT_LABELS, STAT_SHORT, natureMod, natureLabel, ivJudge, expForLevel, gainExp, levelUp, evoItemFor,
-  levelEvolution, itemEvolution, evolve, replaceMove,
+  levelEvolution, itemEvolution, evolve, replaceMove, teraType,
 } from './mechanics.js';
 import {
   ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
   spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf, runRegion,
+  generateRewards, rerollCost, TIER_COLORS,
 } from './game.js';
-import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl } from './content.js';
-import { startBattle, applyItem, battleView } from './battle.js';
+import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl, HELD_KINDS, KEY_ITEMS } from './content.js';
+import { clearBattleForm, setBattleHooks } from './battle.js';
+import { startBattle, applyItem, battleView, megaFormFor } from './battle.js';
 import { renderBattle, beginBattle, onBattleAction, resumeBattleUI } from './battle-ui.js';
 import { dexEntryHtml } from './social-ui.js';
 import { playMusic, sfx, playCry, applyAudioSettings, unlockAudio } from './audio.js';
@@ -34,7 +36,7 @@ export function render() {
   const html = fn ? fn() : '';
   // Pending run messages only show inside the run (never over the menu); battle messages use the text box
   const inRun = RUN_SCREENS.includes(S.screen);
-  const inlineFlow = S.screen === 'battle' && ['msg', 'learn'].includes(S.run?.flow?.[0]?.type);
+  const inlineFlow = S.screen === 'battle' && ['msg', 'learn', 'reward'].includes(S.run?.flow?.[0]?.type);
   app().innerHTML = html + (S.modal ? renderModal() : '') + (inRun && S.run?.flow?.length && !inlineFlow ? renderFlow() : '');
   document.getElementById('topbar-user').innerHTML = S.user ? userMenuHtml() : '';
   renderOnline();
@@ -120,11 +122,14 @@ document.addEventListener('input', e => {
 });
 
 let unlockSink = null;
+setBattleHooks({ track: (g, side) => { if (side === 'p') { track('gimmick:' + g); track('gimmick'); } } });
 setProgressHooks({
   onUnlock: a => {
     sfx('achievement');
     // At the end of a battle, achievements show in the battle text box
     if (unlockSink) unlockSink.push(a);
+    // Earned mid-battle (e.g. first Mega Evolution): shown in the text box when the battle ends
+    else if (S.run?.battle) (S.run.pendingUnlocks ||= []).push({ name: a.name });
     else toast(`🏆 Achievement unlocked: ${a.name}`);
   },
   onChange: () => { persistProfile(); refreshMissionCount(); },
@@ -157,7 +162,7 @@ function monCard(m, i, { action = 'showSummary', extra = '' } = {}) {
   return `<button class="mon-card ${m.hp <= 0 ? 'fainted' : ''}" data-act="${action}" data-arg="${i}">
     ${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', monName(m))}
     <div class="mon-card-body">
-      <div class="row"><strong>${esc(monName(m))}${m.shiny ? ' ✦' : ''}</strong><span>Lv ${m.lv}</span></div>
+      <div class="row"><strong>${esc(monName(m))}${m.shiny ? ' ✦' : ''}${m.item ? ` <span class="held-icon" title="Holding ${esc(m.item)}">${itemImg(m.item)}</span>` : ''}</strong><span>Lv ${m.lv}</span></div>
       <div class="card-types">${DEX[m.id].t.map(typeBadge).join('')}</div>
       ${hpBar(m.hp, max)}
       <div class="row small"><span>${m.hp}/${max} HP ${statusTag(m.st)}</span>${extra}</div>
@@ -837,7 +842,22 @@ registerActions({
   },
   openBag: () => { S.modal = { type: 'bag', pocket: 0 }; render(); },
   bagPocket: p => { S.modal.pocket = +p; render(); },
-  bagItem: name => { S.modal = { type: 'bagTarget', item: name }; render(); },
+  bagItem: name => {
+    const it = ITEMS[name];
+    if (it?.kind === 'valuable' && S.run.bag[name] > 0) {
+      S.run.bag[name]--; S.run.money += it.value; sfx('coin'); toast(`You sold the ${name} for $${it.value.toLocaleString()}.`); persistRun(); render(); return;
+    }
+    S.modal = { type: 'bagTarget', item: name }; render();
+  },
+  takeItem: () => {
+    const m = S.modal, mon = summaryMon(m);
+    if (!mon?.item) return;
+    addItem(S.run, mon.item, 1);
+    toast(`Took the ${mon.item} from ${monName(mon)}.`);
+    mon.item = null;
+    persistRun(); render();
+  },
+  giveItem: () => { S.modal = { type: 'bag', pocket: BAG_POCKETS.findIndex(([t]) => t === 'Held items') }; render(); },
   useItemOn: i => useFieldItem(S.modal.item, +i),
 });
 
@@ -883,7 +903,7 @@ function renderModal() {
   } else if (m.type === 'admin') {
     body = adminHtml();
   } else if (m.type === 'bagTarget') {
-    body = `<h2>Use ${esc(m.item)}</h2><p class="muted">${esc(ITEMS[m.item].desc)}</p>
+    body = `<h2>${isHeld(m.item) ? 'Give' : 'Use'} ${esc(m.item)}</h2><p class="muted">${esc(ITEMS[m.item].desc)}${isHeld(m.item) ? ' A Pokémon already holding an item swaps it, and the old item goes back to the Bag.' : ''}</p>
       <div class="party-list">${S.run.party.map((x, i) => monCard(x, i, { action: 'useItemOn', extra: itemHint(m.item, x) })).join('')}</div>
       <div class="row gap"><button data-act="openBag">Back</button></div>`;
   }
@@ -893,6 +913,10 @@ function renderModal() {
 function itemHint(item, mon) {
   const it = ITEMS[item];
   if (it.kind === 'evo') return itemEvolution(mon, item) ? '<span class="small good-text">Able</span>' : '<span class="small muted">Unable</span>';
+  if (isHeld(item)) return `<span class="small muted">${mon.item ? `Holding ${esc(mon.item)}` : 'No item'}</span> ${heldNote(item, mon)}`;
+  if (it.kind === 'terashard') return `<span class="small muted">Tera ${esc(teraType(mon))}</span>`;
+  if (it.kind === 'gmaxfactor') return FORMS[mon.id]?.gmax ? (mon.gf ? '<span class="small muted">Has it</span>' : '<span class="small good-text">Able</span>') : '<span class="small muted">Unable</span>';
+  if (it.kind === 'mint') return `<span class="small muted">${esc(NATURES[mon.nat])}</span>`;
   return '';
 }
 
@@ -936,6 +960,13 @@ function summaryHtml(mon, index, src = 'party') {
       <div>
         <h4>Nature</h4>
         <div class="row"><span>${esc(natureLabel(mon.nat))}</span>${natures.length ? `<button class="small-btn" data-act="openNature">Change (${natures.length})</button>` : ''}</div>
+        <h4>Held item</h4>
+        <div class="row"><span>${mon.item ? `${itemImg(mon.item)} <b>${esc(mon.item)}</b>` : '<span class="muted">None</span>'}</span>
+          ${S.run && src === 'party' ? `<span>${mon.item ? '<button class="small-btn" data-act="takeItem">Take</button>' : ''}<button class="small-btn" data-act="giveItem">${mon.item ? 'Swap' : 'Give'}</button></span>` : ''}</div>
+        ${mon.item ? `<p class="small muted">${esc(ITEMS[mon.item]?.desc || '')}</p>` : ''}
+        <h4>Battle</h4>
+        <p class="small">Tera Type ${typeBadge(teraType(mon))}${FORMS[mon.id]?.gmax ? ` · ${mon.gf ? '<b>Gigantamax Factor</b>' : 'Can get the Gigantamax Factor (Max Mushrooms)'}` : ''}</p>
+        ${(FORMS[mon.id]?.mega || []).map(f => `<p class="small">${esc(f.n)}: ${f.t.map(typeBadge).join('')} ${esc(f.ab)} · ${f.item ? `needs ${esc(f.item)}` : `knows ${esc(MOVES[f.move]?.n || f.move)}`}</p>`).join('')}
         <h4>Ability</h4>
         ${abilityInfo(mon.ab, mon.ab === sp.h)}
         ${abilities.length ? `<button class="small-btn" data-act="openAbility">Change ability (${abilities.length})</button>` : ''}
@@ -1149,7 +1180,7 @@ function bagHtml(pocket) {
   const items = Object.entries(run.bag).filter(([k, v]) => v > 0 && ITEMS[k] && kinds.includes(ITEMS[k].kind));
   return `<h2>Bag</h2>
     <div class="tabs">${BAG_POCKETS.map(([t], i) => `<button class="${i === pocket ? 'active' : ''}" data-act="bagPocket" data-arg="${i}">${t}</button>`).join('')}</div>
-    <div class="bag-list">${items.length ? items.map(([k, v]) => `<button class="bag-item" data-act="bagItem" data-arg="${esc(k)}" ${ITEMS[k].kind === 'ball' ? 'disabled' : ''}>
+    <div class="bag-list">${items.length ? items.map(([k, v]) => `<button class="bag-item" data-act="bagItem" data-arg="${esc(k)}" ${ITEMS[k].kind === 'ball' || ITEMS[k].kind === 'key' ? 'disabled' : ''}>
       ${itemImg(k)}<span><strong>${esc(k)}</strong><small class="muted">${esc(ITEMS[k].desc)}</small></span><b>×${v}</b></button>`).join('') : `<p class="muted">No ${title.toLowerCase()}.</p>`}</div>
     <div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`;
 }
@@ -1165,6 +1196,24 @@ function useFieldItem(item, index) {
     run.bag[item]--;
     S.modal = null;
     queueFlow([{ type: 'evolve', uid: mon.uid, to, item }]);
+    return;
+  }
+  if (HELD_KINDS.includes(it.kind)) {
+    run.bag[item]--;
+    const old = mon.item;
+    if (old) addItem(run, old, 1);
+    mon.item = item;
+    sfx('select');
+    toast(old ? `${monName(mon)} swapped its ${old} for the ${item}.` : `${monName(mon)} is now holding the ${item}.`);
+    S.modal = null;
+    persistRun(); render();
+    return;
+  }
+  const special = fieldSpecial(mon, it, item);
+  if (special) {
+    if (!special.ok) { toast(special.msg || "It won't have any effect."); sfx('error'); return; }
+    run.bag[item]--;
+    sfx('heal'); toast(special.msg); persistRun(); render();
     return;
   }
   if (it.kind === 'candy' || it.kind === 'expcandy') {
@@ -1194,6 +1243,34 @@ function useFieldItem(item, index) {
   render();
 }
 
+/** Tera Shards, Max Mushrooms, Mints and Ability Capsule/Patch. Returns null for other items. */
+function fieldSpecial(mon, it, item) {
+  const name = monName(mon), sp = DEX[mon.id];
+  switch (it.kind) {
+    case 'terashard':
+      if (teraType(mon) === it.type) return { ok: false, msg: `${name}'s Tera Type is already ${it.type}.` };
+      mon.tt = it.type; return { ok: true, msg: `${name}'s Tera Type is now ${it.type}!` };
+    case 'gmaxfactor':
+      if (!FORMS[mon.id]?.gmax) return { ok: false, msg: `${name} can't Gigantamax.` };
+      if (mon.gf) return { ok: false, msg: `${name} already has the Gigantamax Factor.` };
+      mon.gf = true; return { ok: true, msg: `${name} gained the Gigantamax Factor! It will Gigantamax when it Dynamaxes.` };
+    case 'mint': {
+      const n = NATURES.indexOf(it.nature);
+      if (mon.nat === n) return { ok: false, msg: `${name} already has a ${it.nature} nature.` };
+      const before = maxHp(mon); mon.nat = n; mon.hp = Math.max(mon.hp > 0 ? 1 : 0, mon.hp + maxHp(mon) - before);
+      return { ok: true, msg: `${name}'s stats now follow the ${it.nature} nature.` };
+    }
+    case 'capsule': {
+      if (sp.a.length < 2 || !sp.a.includes(mon.ab)) return { ok: false, msg: `It won't have any effect on ${name}.` };
+      mon.ab = sp.a.find(a => a !== mon.ab); return { ok: true, msg: `${name}'s Ability changed to ${mon.ab}!` };
+    }
+    case 'patch':
+      if (!sp.h || mon.ab === sp.h) return { ok: false, msg: `It won't have any effect on ${name}.` };
+      mon.ab = sp.h; return { ok: true, msg: `${name}'s Ability changed to its Hidden Ability, ${mon.ab}!` };
+  }
+  return null;
+}
+
 // ---------- Admin panel (only for accounts with is_admin set in the database) ----------
 function adminHtml() {
   const run = S.run;
@@ -1208,6 +1285,9 @@ function adminHtml() {
       <button data-act="adminShiny">Make team shiny</button>
       <button data-act="adminLevels" data-arg="10">Team +10 levels</button>
       <button data-act="adminLevels" data-arg="100">Team to Lv 100</button>
+      <button data-act="adminGimmicks">Mega Bracelet, Z-Ring, Dynamax Band, Tera Orb</button>
+      <button data-act="adminMegaStones">Mega Stones, Z-Crystals and Max Mushrooms for my team</button>
+      ${inBattle ? '' : '<button data-act="adminReward">Open a reward pick</button>'}
       ${inBattle ? '' : `<button data-act="adminSkip" data-arg="2">Skip to Act II</button>
       <button data-act="adminSkip" data-arg="3">Skip to Act III</button>
       <button data-act="adminSkip" data-arg="league">Skip to the League</button>`}
@@ -1246,6 +1326,25 @@ registerActions({
     if (el.checked) S.run.godUsed = true;
     toast(el.checked ? 'God mode on' : 'God mode off');
     persistRun(); render();
+  }),
+  adminGimmicks: adminOnly(() => {
+    S.run.godUsed = true;
+    for (const k of Object.keys(KEY_ITEMS)) S.run.bag[k] = 1;
+    sfx('coin'); toast('Added the four battle gimmick key items'); persistRun(); render();
+  }),
+  adminMegaStones: adminOnly(() => {
+    S.run.godUsed = true;
+    for (const m of S.run.party) {
+      for (const f of FORMS[m.id]?.mega || []) if (f.item) addItem(S.run, f.item, 1);
+      if (FORMS[m.id]?.gmax) addItem(S.run, 'Max Mushrooms', 1);
+      for (const x of m.moves) { const mv = MOVES[x.id]; if (mv.c !== 'S') addItem(S.run, Object.entries(ITEMS).find(([, v]) => v.kind === 'z' && v.type === mv.t)[0], 1); }
+    }
+    sfx('coin'); toast('Added to the Bag (Held items pocket)'); persistRun(); render();
+  }),
+  adminReward: adminOnly(() => {
+    S.run.godUsed = true;
+    S.modal = null;
+    queueFlow([{ type: 'reward', kind: 'gym', options: generateRewards(S.run, 'gym'), rerolls: 0 }]);
   }),
   adminMoney: adminOnly(() => { S.run.godUsed = true; S.run.money += 10000; sfx('coin'); persistRun(); render(); }),
   adminItems: adminOnly(() => { S.run.godUsed = true; for (const name of Object.keys(ITEMS)) S.run.bag[name] = 99; sfx('coin'); toast('Bag filled'); persistRun(); render(); }),
@@ -1332,12 +1431,98 @@ export function learnPrompt(step, mon) {
   };
 }
 
+// ---------- Rewards after battle ----------
+const TIER_LABEL = { common: 'Common', great: 'Great', ultra: 'Ultra', rogue: 'Rogue', master: 'Master' };
+const isHeld = item => HELD_KINDS.includes(ITEMS[item]?.kind);
+function heldNote(item, mon) {
+  const it = ITEMS[item];
+  if (it?.kind === 'mega') return (FORMS[mon.id]?.mega || []).some(f => f.item === item) ? '<span class="small good-text">Can use it</span>' : '<span class="small muted">Can\'t use it</span>';
+  if (it?.fx === 'eviolite') return DEX[mon.id].e?.length ? '<span class="small good-text">Can evolve</span>' : '<span class="small muted">Fully evolved</span>';
+  return '';
+}
+export function rewardPrompt(step) {
+  const run = S.run;
+  if (step.stage === 'target') {
+    const item = step.options[step.pick].item;
+    return {
+      text: `Give the ${item} to which Pokémon? Each Pokémon can hold one item.`,
+      controls: `<div class="reward-targets">${run.party.map((m, i) => `<button class="reward-target" data-act="rewardGive" data-arg="${i}" ${m.item ? 'disabled' : ''}>
+          ${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', monName(m))}<span><strong>${esc(monName(m))}</strong> <small>Lv ${m.lv}</small><br>
+          <small class="muted">${m.item ? `Holding ${esc(m.item)}` : 'No item'}</small> ${heldNote(item, m)}</span></button>`).join('')}</div>
+        <div class="learn-actions"><button class="ghost" data-act="rewardBack">Back</button><button data-act="rewardBag">Put it in the Bag</button></div>`,
+    };
+  }
+  const cost = run.god ? 0 : rerollCost(run, step.rerolls || 0);
+  return {
+    text: 'Choose a reward!',
+    controls: `<div class="reward-grid">${step.options.map((o, i) => {
+      const it = ITEMS[o.item];
+      return `<button class="reward-card tier-${o.tier}" style="--tier:${TIER_COLORS[o.tier]}" data-act="rewardPick" data-arg="${i}">
+        <span class="tier">${TIER_LABEL[o.tier]}</span>${itemImg(o.item)}
+        <strong>${esc(o.item)}${o.qty > 1 ? ` ×${o.qty}` : ''}</strong>
+        <small>${esc(it?.desc || '')}</small>${isHeld(o.item) ? '<span class="held-tag">Held item</span>' : ''}</button>`;
+    }).join('')}</div>
+    <div class="learn-actions"><button data-act="rewardSkip">Skip</button><button data-act="rewardReroll" ${run.money < cost ? 'disabled' : ''}>Reroll · $${cost.toLocaleString()}</button></div>`,
+  };
+}
+function rewardDone(text) {
+  S.run.flow[0] = { type: 'msg', text, sfx: 'coin' };
+  sfx('coin');
+  persistRun();
+  render();
+}
+registerActions({
+  rewardPick: i => {
+    const run = S.run, step = run.flow[0];
+    const o = step.options[+i];
+    if (!o) return;
+    if (isHeld(o.item)) {
+      if (run.party.some(m => !m.item)) { step.stage = 'target'; step.pick = +i; render(); return; }
+      addItem(run, o.item, o.qty);
+      rewardDone(`Everyone on your team is already holding an item, so the ${o.item} went to the Bag.`);
+      return;
+    }
+    addItem(run, o.item, o.qty);
+    const key = KEY_ITEMS[o.item];
+    rewardDone(key ? `You obtained the ${o.item}! ${key.desc}` : `You got ${o.item}${o.qty > 1 ? ` ×${o.qty}` : ''}! It's in the Bag.`);
+  },
+  rewardGive: i => {
+    const run = S.run, step = run.flow[0];
+    const o = step.options[step.pick], mon = run.party[+i];
+    if (!o || !mon || mon.item) return;
+    mon.item = o.item;
+    if (o.qty > 1) addItem(run, o.item, o.qty - 1);
+    rewardDone(`${monName(mon)} is now holding the ${o.item}.${o.qty > 1 ? ' The rest went to the Bag.' : ''}`);
+  },
+  rewardBag: () => {
+    const run = S.run, step = run.flow[0];
+    const o = step.options[step.pick];
+    addItem(run, o.item, o.qty);
+    rewardDone(`The ${o.item} was put in the Bag.`);
+  },
+  rewardBack: () => { const step = S.run.flow[0]; step.stage = null; step.pick = null; render(); },
+  rewardReroll: () => {
+    const run = S.run, step = run.flow[0];
+    const cost = run.god ? 0 : rerollCost(run, step.rerolls || 0);
+    if (run.money < cost) return;
+    run.money -= cost;
+    step.rerolls = (step.rerolls || 0) + 1;
+    step.options = generateRewards(run, step.kind);
+    persistRun();
+    render();
+  },
+  rewardSkip: () => flowAdvance(),
+});
+
 function renderFlow() {
   const step = S.run.flow[0];
   const mon = step.uid ? findMon(step.uid) : null;
   let body = '';
   if (step.type === 'msg') {
     body = `<p class="big-text">${esc(step.text)}</p><button class="primary" data-act="flowNext">OK</button>`;
+  } else if (step.type === 'reward') {
+    const rp = rewardPrompt(step);
+    body = `<p class="big-text">${esc(rp.text)}</p>${rp.controls}`;
   } else if (step.type === 'learn' && mon) {
     const lp = learnPrompt(step, mon);
     body = `<p class="big-text">${esc(lp.text)}</p>${lp.controls}`;
@@ -1446,6 +1631,8 @@ export function finishBattle() {
   const run = S.run;
   const b = run.battle;
   const result = b.over;
+  // Mega Evolution, Dynamax and Terastallization end with the battle
+  for (const m of [...run.party, ...run.box, ...b.enemy]) clearBattleForm(m);
   const steps = [];
   let then = 'map';
   // Winning with the last hit while your own team went down (recoil, poison) still counts as a blackout
@@ -1469,7 +1656,8 @@ export function finishBattle() {
   }
 
   // Points, missions and achievements
-  unlockSink = [];
+  unlockSink = [...(run.pendingUnlocks || [])];
+  delete run.pendingUnlocks;
   if (result === 'win') battleWon(b.kind, b.enemy);
   if (result === 'caught') {
     caughtEvents(b.caughtMon);
@@ -1528,6 +1716,10 @@ export function finishBattle() {
   }
   for (const a of unlockSink) steps.push({ type: 'msg', text: `🏆 Achievement unlocked: ${a.name}!` });
   unlockSink = null;
+  // PokéRogue-style rewards after every win or catch
+  if ((result === 'win' || result === 'caught') && then !== 'hallOfFame' && run.party.some(m => m.hp > 0)) {
+    steps.push({ type: 'reward', kind: b.kind, options: generateRewards(run, b.kind), rerolls: 0 });
+  }
   // Messages and move prompts after the battle play in the battle text box
   S.lastBattle = run.battle;
   run.battle = null;
