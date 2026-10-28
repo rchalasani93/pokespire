@@ -9,7 +9,7 @@ import {
 import {
   ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
   spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf, runRegion,
-  generateRewards, rerollCost, TIER_COLORS,
+  generateRewards, rerollCost, TIER_COLORS, rewardShop,
 } from './game.js';
 import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl, HELD_KINDS, KEY_ITEMS } from './content.js';
 import { clearBattleForm, setBattleHooks } from './battle.js';
@@ -902,6 +902,14 @@ function renderModal() {
     body = dexEntryHtml(m.id);
   } else if (m.type === 'admin') {
     body = adminHtml();
+  } else if (m.type === 'transfer') {
+    const from = m.from != null ? S.run.party[m.from] : null;
+    body = from ? `<h2>Give ${esc(from.item)} to…</h2><p class="muted small">If the other Pokémon is holding something, they swap.</p>
+        <div class="party-list">${S.run.party.map((x, i) => i === m.from ? '' : monCard(x, i, { action: 'transferTo', extra: `<span class="small muted">${x.item ? esc(x.item) : 'No item'}</span>` })).join('')}</div>
+        <div class="row gap"><button data-act="rewardTransfer">Back</button><button class="primary" data-act="closeModal">Done</button></div>`
+      : `<h2>Transfer held items</h2><p class="muted small">Pick the Pokémon to take an item from.</p>
+        <div class="party-list">${S.run.party.map((x, i) => x.item ? monCard(x, i, { action: 'transferFrom', extra: `<span class="small">${esc(x.item)}</span>` }) : '').join('')}</div>
+        <div class="row gap"><button class="primary" data-act="closeModal">Done</button></div>`;
   } else if (m.type === 'bagTarget') {
     body = `<h2>${isHeld(m.item) ? 'Give' : 'Use'} ${esc(m.item)}</h2><p class="muted">${esc(ITEMS[m.item].desc)}${isHeld(m.item) ? ' A Pokémon already holding an item swaps it, and the old item goes back to the Bag.' : ''}</p>
       <div class="party-list">${S.run.party.map((x, i) => monCard(x, i, { action: 'useItemOn', extra: itemHint(m.item, x) })).join('')}</div>
@@ -1452,9 +1460,11 @@ export function rewardPrompt(step) {
         <div class="learn-actions"><button class="ghost" data-act="rewardBack">Back</button><button data-act="rewardBag">Put it in the Bag</button></div>`,
     };
   }
-  const cost = run.god ? 0 : rerollCost(run, step.rerolls || 0);
+  const cost = run.god ? 0 : rerollCost(run, step.rerolls || 0) * (step.lock ? 2 : 1);
+  const shop = rewardShop(run);
+  const anyHeld = run.party.some(m => m.item) && run.party.length > 1;
   return {
-    text: 'Choose a reward!',
+    text: `Choose a reward! You have $${run.money.toLocaleString()}.`,
     controls: `<div class="reward-grid">${step.options.map((o, i) => {
       const it = ITEMS[o.item];
       return `<button class="reward-card tier-${o.tier}" style="--tier:${TIER_COLORS[o.tier]}" data-act="rewardPick" data-arg="${i}">
@@ -1462,7 +1472,15 @@ export function rewardPrompt(step) {
         <strong>${esc(o.item)}${o.qty > 1 ? ` ×${o.qty}` : ''}</strong>
         <small>${esc(it?.desc || '')}</small>${isHeld(o.item) ? '<span class="held-tag">Held item</span>' : ''}</button>`;
     }).join('')}</div>
-    <div class="learn-actions"><button data-act="rewardSkip">Skip</button><button data-act="rewardReroll" ${run.money < cost ? 'disabled' : ''}>Reroll · $${cost.toLocaleString()}</button></div>`,
+    <div class="reward-shop" aria-label="Shop">${shop.map(x => `<button class="shop-chip" data-act="rewardBuy" data-arg="${esc(x.name)}" ${run.money < x.price ? 'disabled' : ''} title="${esc(ITEMS[x.name].desc)}">
+      ${itemImg(x.name)}<span>${esc(x.name)}<small>$${x.price.toLocaleString()} · have ${run.bag[x.name] || 0}</small></span></button>`).join('')}</div>
+    <div class="reward-actions">
+      <button data-act="rewardTeam">Check Team</button>
+      <button data-act="rewardTransfer" ${anyHeld ? '' : 'disabled'}>Transfer items</button>
+      <button class="${step.lock ? 'active' : ''}" data-act="rewardLock" aria-pressed="${!!step.lock}">${step.lock ? '🔒 Rarities locked' : '🔓 Lock rarities'}</button>
+      <button data-act="rewardReroll" ${run.money < cost ? 'disabled' : ''}>Reroll · $${cost.toLocaleString()}</button>
+      <button class="primary" data-act="rewardSkip">Skip</button>
+    </div>`,
   };
 }
 function rewardDone(text) {
@@ -1501,13 +1519,35 @@ registerActions({
     rewardDone(`The ${o.item} was put in the Bag.`);
   },
   rewardBack: () => { const step = S.run.flow[0]; step.stage = null; step.pick = null; render(); },
+  rewardBuy: name => {
+    const run = S.run;
+    const item = rewardShop(run).find(x => x.name === name);
+    if (!item || run.money < item.price) return;
+    run.money -= item.price;
+    addItem(run, name, 1);
+    sfx('coin'); toast(`Bought a ${name}. It's in the Bag.`);
+    persistRun(); render();
+  },
+  rewardTeam: () => { S.modal = { type: 'team' }; render(); },
+  rewardTransfer: () => { S.modal = { type: 'transfer', from: null }; render(); },
+  transferFrom: i => { S.modal.from = +i; render(); },
+  transferTo: i => {
+    const run = S.run, a = run.party[S.modal.from], b = run.party[+i];
+    if (!a || !b || a === b || !a.item) return;
+    [a.item, b.item] = [b.item || null, a.item];
+    toast(b.item && a.item ? `${monName(a)} and ${monName(b)} swapped items.` : `${monName(b)} is now holding the ${b.item}.`);
+    sfx('select');
+    S.modal = { type: 'transfer', from: null };
+    persistRun(); render();
+  },
+  rewardLock: () => { const step = S.run.flow[0]; step.lock = !step.lock; render(); },
   rewardReroll: () => {
     const run = S.run, step = run.flow[0];
-    const cost = run.god ? 0 : rerollCost(run, step.rerolls || 0);
+    const cost = run.god ? 0 : rerollCost(run, step.rerolls || 0) * (step.lock ? 2 : 1);
     if (run.money < cost) return;
     run.money -= cost;
     step.rerolls = (step.rerolls || 0) + 1;
-    step.options = generateRewards(run, step.kind);
+    step.options = generateRewards(run, step.kind, step.lock ? step.options.map(o => o.tier) : null);
     persistRun();
     render();
   },

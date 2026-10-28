@@ -516,3 +516,16 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
 .reward-target .mini-sprite { width: 44px; height: 44px; }
 .held-icon .item-icon { width: 18px; height: 18px; vertical-align: middle; }
 @media (max-width: 520px) { .reward-card small { display: none; } .reward-card { min-height: 0; } .reward-targets { grid-template-columns: 1fr; } }
+
+.reward-shop { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 8px; }
+.shop-chip { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 5px 8px; text-align: left; font-size: .78rem; }
+.shop-chip .item-icon { width: 28px; height: 28px; image-rendering: pixelated; }
+.shop-chip small { display: block; color: var(--muted); font-size: .66rem; }
+.reward-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.reward-actions button { padding: 10px 6px; font-size: .85rem; }
+.reward-actions button.active { border-color: var(--accent2); color: var(--accent2); }
+.reward-actions .primary { grid-column: span 1; }
+.battle-bottom, .battle-bottom > *, .controls { min-width: 0; }
+.reward-grid, .reward-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.reward-shop { max-width: 100%; }
+.reward-card strong { overflow-wrap: anywhere; }

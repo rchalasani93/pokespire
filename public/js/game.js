@@ -533,11 +533,12 @@ function rollTier(boss) {
 }
 
 /** Three reward options after a battle; bosses and Elite/Legendary Pokémon roll a tier higher. */
-export function generateRewards(run, kind) {
+export function generateRewards(run, kind, lockedTiers = null) {
   const boss = ['gym', 'villainBoss', 'e4', 'champion', 'elite', 'legendary'].includes(kind);
   const out = [];
   for (let i = 0; i < 30 && out.length < 3; i++) {
-    const tier = rollTier(boss && (i === 0 || Math.random() < 0.4));
+    // With rarities locked, a reroll keeps each slot's tier
+    const tier = lockedTiers?.[out.length] || rollTier(boss && (i === 0 || Math.random() < 0.4));
     const pool = rewardPool(run, tier).filter(o => !out.some(x => x.item === o.item));
     if (!pool.length) continue;
     const total = pool.reduce((a, o) => a + o.w, 0);
@@ -563,3 +564,13 @@ export function partySummary(party) {
 }
 
 export { REGIONS, maxHp, movesAtLevel };
+
+/** The shop row under the rewards (PokéRogue sells healing items there), stocked by act. */
+export function rewardShop(run) {
+  const act = run.act;
+  const list = ['Potion', 'Super Potion', 'Full Heal', 'Revive', 'Elixir', 'Poké Ball'];
+  if (act >= 2) list.push('Hyper Potion', 'Max Revive', 'Great Ball');
+  if (act >= 3) list.push('Max Potion', 'Full Restore', 'Max Elixir', 'Ultra Ball');
+  const hell = diffOf(run).permadeath;
+  return list.filter(n => !(hell && ITEMS[n].kind === 'revive')).map(name => ({ name, price: priceOf(run, name) }));
+}
