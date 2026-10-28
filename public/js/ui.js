@@ -269,13 +269,14 @@ SCREENS.setup = () => `<section class="panel narrow">
 /** Admin view-only unlock: every species' shiny is available (does not change real catches or achievements). */
 export const adminAllShinies = () => !!(S.user?.isAdmin && S.profile?.settings.allShinies);
 /** Caught-state for a species: 'shiny' (shiny caught), 'caught', or null. */
-export function caughtState(id) {
-  if ((S.profile?.shinies || []).includes(id) || adminAllShinies()) return 'shiny';
-  if ((S.profile?.caught || []).includes(id) || (S.user?.isAdmin && S.profile?.settings.allStarters)) return 'caught';
+/** `real` ignores the admin view-only unlocks, so battle marks show what you've actually caught. */
+export function caughtState(id, { real = false } = {}) {
+  if ((S.profile?.shinies || []).includes(id) || (!real && adminAllShinies())) return 'shiny';
+  if ((S.profile?.caught || []).includes(id) || (!real && S.user?.isAdmin && S.profile?.settings.allStarters)) return 'caught';
   return null;
 }
-export function caughtMark(id) {
-  const st = caughtState(id);
+export function caughtMark(id, opts) {
+  const st = caughtState(id, opts);
   if (st === 'shiny') return '<span class="caught-mark shiny" title="Shiny caught (and the normal form)">✦</span>';
   if (st === 'caught') return '<span class="caught-mark" title="Caught"><i class="mini-ball"></i></span>';
   return '';
@@ -771,13 +772,16 @@ function tutorScreen(run, n) {
   const mon = run.party[sel];
   const known = new Set(mon.moves.map(x => x.id));
   const remind = [...new Set((LEARN[mon.id] || []).filter(([lv, m]) => lv <= mon.lv && MOVES[m] && !known.has(m)).map(([, m]) => m))];
-  const offers = tutorOffers(run, mon, n.id || 'tutor');
+  // The selection is fixed for this visit; learned moves stay listed as learned
+  n.offers ||= {};
+  n.offers[mon.uid] ||= tutorOffers(run, mon, n.id || 'tutor').map(o => o.id);
+  const offers = n.offers[mon.uid].map(id => ({ id, price: tutorPrice(run, id) }));
   const row = (id, price) => {
     const mv = MOVES[id];
     return `<div class="tutor-move" style="--tc:${TYPE_COLORS[mv.t]}">
       <div><strong>${esc(mv.n)}</strong> ${typeBadge(mv.t)} <span class="small muted">${CAT[mv.c]} · Pow ${mv.p || '—'} · Acc ${mv.a || '—'} · ${mv.pp} PP</span>
         <p class="small muted">${esc(mv.d || '')}</p></div>
-      <button class="${price ? '' : 'primary'}" data-act="tutorTeach" data-arg="${id}|${price}" ${run.money < price ? 'disabled' : ''}>${price ? `Teach · $${price.toLocaleString()}` : 'Relearn (free)'}</button>
+      ${known.has(id) ? '<button disabled>Learned ✓</button>' : `<button class="${price ? '' : 'primary'}" data-act="tutorTeach" data-arg="${id}|${price}" ${run.money < price ? 'disabled' : ''}>${price ? `Teach · $${price.toLocaleString()}` : 'Relearn (free)'}</button>`}
     </div>`;
   };
   return `<section class="panel">
@@ -1461,7 +1465,7 @@ export function learnPrompt(step, mon) {
   if (step.stage === 'stop') {
     return {
       text: `Stop trying to teach ${mv.n}?`,
-      controls: `<div class="action-grid"><button data-act="learnStopYes">Yes</button><button class="primary" data-act="learnStopNo">No</button></div>`,
+      controls: `<div class="learn-actions yn"><button data-act="learnStopYes">Yes</button><button class="primary" data-act="learnStopNo">No</button></div>`,
     };
   }
   if (step.stage === 'pick') {
@@ -1480,7 +1484,7 @@ export function learnPrompt(step, mon) {
   return {
     text: `${name} wants to learn the move ${mv.n}. But ${name} can't learn more than four moves. Delete a move to make room for ${mv.n}?`,
     controls: `<div class="learn-list">${learnOption(step.move, 4, { isNew: true, sel: false }).replace('data-act="learnPick"', 'data-act="learnInfo"')}</div>
-      <div class="action-grid"><button class="primary" data-act="learnYes">Yes</button><button data-act="learnNo">No</button></div>`,
+      <div class="learn-actions yn"><button class="primary" data-act="learnYes">Yes</button><button data-act="learnNo">No</button></div>`,
   };
 }
 

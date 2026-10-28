@@ -100,7 +100,7 @@ function battleScreen() {
     ${b.trainer ? `<img class="trainer-sprite" src="${trainerSpriteUrl(b.trainer.sprite)}" alt="" onerror="this.remove()">` : ''}
     <div class="foe-col">
     <div class="hud foe">
-      <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} ${E ? caughtMark(E.id) : ''}</strong><span>Lv ${E?.lv}</span></div>
+      <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} ${E ? caughtMark(E.id, { real: true }) : ''}</strong><span>Lv ${E?.lv}</span></div>
       <div class="hud-types">${E ? (E.t || DEX[E.id].t).map(typeBadge).join('') : ''}${formTag(E)}</div>
       ${E ? hpBar(E.hp, E.max) : ''}
       <div class="row small status-line"><span>${statusTag(E?.st)}${b.enemy[b.ei]?.elite ? '<span class="elite-tag">ELITE</span>' : ''}</span>${enemyBalls}</div>

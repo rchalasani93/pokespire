@@ -539,3 +539,5 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
 .tutor-move p { margin: 2px 0 0; }
 .tutor-move button { flex: 0 0 auto; }
 @media (max-width: 520px) { .tutor-move { flex-direction: column; align-items: stretch; } }
+.learn-actions.yn { grid-template-columns: 1fr 1fr; }
+.learn-actions.yn button { min-height: 0; padding: 12px; font-size: 1rem; }

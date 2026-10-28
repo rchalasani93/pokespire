@@ -215,7 +215,11 @@ export function buildEncounter(run, node) {
     }
     case 'legendary': {
       const regionLegends = isClassic(run) ? P.legends.filter(x => regionOf(x) === run.region) : [];
-      const id = pick(regionLegends.length ? regionLegends : act === 1 ? P.subLegends : P.legends);
+      // Don't repeat a Legendary within a run while others are left
+      const pool0 = regionLegends.length ? regionLegends : act === 1 ? P.subLegends : P.legends;
+      const fresh = pool0.filter(x => !(run.legendsSeen || []).includes(x));
+      const id = pick(fresh.length ? fresh : pool0);
+      (run.legendsSeen ||= []).push(id);
       const L = lv + 6;
       const mon = createMon(id, L, { perfectIvs: 3, shinyOdds: WILD_SHINY_ODDS });
       return { kind: 'legendary', enemy: [mon], canCatch: true, canRun: true, ai: 1, intro: `The Legendary ${DEX[id].n} appeared!` };
@@ -337,6 +341,7 @@ export function addItem(run, item, n = 1) { run.bag[item] = (run.bag[item] || 0)
 export function tutorOffers(run, mon, nodeId) {
   const known = new Set(mon.moves.map(x => x.id));
   const all = [...(MACHINES[mon.id] || [])].filter(id => MOVES[id] && !known.has(id)).sort();
+  if (!all.length) return [];
   const seed = [...`${nodeId}${mon.uid}`].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
   const out = [];
   for (let i = 0; i < all.length && out.length < 8; i++) {
