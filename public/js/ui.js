@@ -1507,6 +1507,20 @@ function heldNote(item, mon) {
 }
 export function rewardPrompt(step) {
   const run = S.run;
+  if (step.stage === 'tm') {
+    const item = step.options[step.pick].item, move = ITEMS[item].move;
+    return {
+      text: `Teach ${MOVES[move].n} to which Pokémon?`,
+      controls: `<div class="reward-targets">${run.party.map((m, i) => {
+          const knows = m.moves.some(x => x.id === move);
+          const able = !knows && (canLearnMachine(m.id, move) || run.god);
+          return `<button class="reward-target" data-act="rewardTeach" data-arg="${i}" ${able ? '' : 'disabled'}>
+          ${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', monName(m))}<span><strong>${esc(monName(m))}</strong> <small>Lv ${m.lv}</small><br>
+          <small class="${able ? 'good-text' : 'muted'}">${knows ? 'Already knows it' : able ? 'Able' : 'Unable'}</small></span></button>`;
+        }).join('')}</div>
+        <div class="learn-actions"><button class="ghost" data-act="rewardBack">Back</button><button data-act="rewardBag">Put it in the Bag</button></div>`,
+    };
+  }
   if (step.stage === 'target') {
     const item = step.options[step.pick].item;
     return {
@@ -1551,6 +1565,7 @@ registerActions({
     const run = S.run, step = run.flow[0];
     const o = step.options[+i];
     if (!o) return;
+    if (ITEMS[o.item]?.kind === 'tm') { step.stage = 'tm'; step.pick = +i; render(); return; }
     if (isHeld(o.item)) {
       if (run.party.some(m => !m.item)) { step.stage = 'target'; step.pick = +i; render(); return; }
       addItem(run, o.item, o.qty);
@@ -1568,6 +1583,21 @@ registerActions({
     mon.item = o.item;
     if (o.qty > 1) addItem(run, o.item, o.qty - 1);
     rewardDone(`${monName(mon)} is now holding the ${o.item}.${o.qty > 1 ? ' The rest went to the Bag.' : ''}`);
+  },
+  rewardTeach: i => {
+    const run = S.run, step = run.flow[0];
+    const item = step.options[step.pick]?.item, mon = run.party[+i];
+    const move = ITEMS[item]?.move;
+    if (!mon || !move || mon.moves.some(x => x.id === move) || !(canLearnMachine(mon.id, move) || run.god)) return;
+    if (mon.moves.length < 4) {
+      mon.moves.push({ id: move, pp: MOVES[move].pp });
+      sfx('learn');
+      rewardDone(`${monName(mon)} learned ${MOVES[move].n}!`);
+      return;
+    }
+    // Full moveset: the usual learn prompt; if it isn't learned, the TM goes to the Bag
+    run.flow[0] = { type: 'learn', uid: mon.uid, move, tmReward: item };
+    persistRun(); render();
   },
   rewardBag: () => {
     const run = S.run, step = run.flow[0];
@@ -1686,7 +1716,8 @@ registerActions({
   skipLearn: () => {
     const step = S.run.flow[0];
     const mon = findMon(step.uid);
-    S.run.flow.splice(1, 0, { type: 'msg', text: `${monName(mon)} did not learn ${MOVES[step.move].n}.` });
+    if (step.tmReward) addItem(S.run, step.tmReward, 1);
+    S.run.flow.splice(1, 0, { type: 'msg', text: `${monName(mon)} did not learn ${MOVES[step.move].n}.${step.tmReward ? ` The ${step.tmReward} was put in the Bag.` : ''}` });
     flowAdvance();
   },
   doEvolve: () => {
