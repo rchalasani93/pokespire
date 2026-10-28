@@ -1,15 +1,15 @@
 // Screens, overlays and player flows (everything except the battle screen).
 import { S, defaultProfile, normalizeProfile } from './state.js';
 import { api, configured, saveRun, saveProfile, flushSaves, cancelRunSave, joinPresence, leavePresence } from './api.js';
-import { FORMS, DEX, MOVES, LEARN, REGIONS, ABILITIES, regionOf, familyRoot, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS, movesAtLevel } from './data.js';
+import { FORMS, canLearnMachine, DEX, MOVES, LEARN, REGIONS, ABILITIES, regionOf, familyRoot, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS, movesAtLevel } from './data.js';
 import {
   createMon, calcStats, maxHp, monName, NATURES, STAT_LABELS, STAT_SHORT, natureMod, natureLabel, ivJudge, expForLevel, gainExp, levelUp, evoItemFor,
-  levelEvolution, itemEvolution, evolve, replaceMove, teraType,
+  levelEvolution, itemEvolution, evolve, replaceMove, teraType, starterMoves,
 } from './mechanics.js';
 import {
   ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
-  spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf, runRegion,
-  generateRewards, rerollCost, TIER_COLORS, rewardShop,
+  martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf, runRegion,
+  generateRewards, rerollCost, TIER_COLORS, rewardShop, tutorOffers, tutorPrice,
 } from './game.js';
 import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl, HELD_KINDS, KEY_ITEMS } from './content.js';
 import { clearBattleForm, setBattleHooks } from './battle.js';
@@ -737,18 +737,10 @@ export function launchBattle(spec) {
   beginBattle(events);
 }
 
-// ---------- Service nodes: PokéStop, PokéMart, Pokémon Center ----------
+// ---------- Service nodes: Move Tutor, PokéMart, Pokémon Center ----------
 SCREENS.node = () => {
   const run = S.run, n = run.node;
-  if (n.type === 'stop') {
-    return `<section class="panel narrow center-text">
-      <p class="eyebrow">PokéStop</p>
-      <div class="pokestop ${n.spun ? 'spun' : ''}">🔷</div>
-      ${n.spun ? `<h2>Items received</h2><ul class="loot">${n.result.items.map(([it, c]) => `<li>${itemImg(it)} ${esc(it)} ×${c}</li>`).join('')}${n.result.money ? `<li>💰 $${n.result.money.toLocaleString()}</li>` : ''}</ul>
-        <button class="primary" data-act="leaveNode">Continue</button>`
-        : `<h2>Spin the Photo Disc</h2><p class="muted">PokéStops hand out free supplies.</p><button class="primary big" data-act="spinStop">Spin!</button>`}
-    </section>`;
-  }
+  if (n.type === 'tutor' || n.type === 'stop') return tutorScreen(run, n);
   if (n.type === 'mart') {
     const stock = martStock(run);
     return `<section class="panel">
@@ -773,6 +765,53 @@ SCREENS.node = () => {
   return '';
 };
 
+// ---------- Move Tutor ----------
+function tutorScreen(run, n) {
+  const sel = Math.min(n.sel || 0, run.party.length - 1);
+  const mon = run.party[sel];
+  const known = new Set(mon.moves.map(x => x.id));
+  const remind = [...new Set((LEARN[mon.id] || []).filter(([lv, m]) => lv <= mon.lv && MOVES[m] && !known.has(m)).map(([, m]) => m))];
+  const offers = tutorOffers(run, mon, n.id || 'tutor');
+  const row = (id, price) => {
+    const mv = MOVES[id];
+    return `<div class="tutor-move" style="--tc:${TYPE_COLORS[mv.t]}">
+      <div><strong>${esc(mv.n)}</strong> ${typeBadge(mv.t)} <span class="small muted">${CAT[mv.c]} · Pow ${mv.p || '—'} · Acc ${mv.a || '—'} · ${mv.pp} PP</span>
+        <p class="small muted">${esc(mv.d || '')}</p></div>
+      <button class="${price ? '' : 'primary'}" data-act="tutorTeach" data-arg="${id}|${price}" ${run.money < price ? 'disabled' : ''}>${price ? `Teach · $${price.toLocaleString()}` : 'Relearn (free)'}</button>
+    </div>`;
+  };
+  return `<section class="panel">
+    <div class="row"><div><p class="eyebrow">Move Tutor</p><h2>Which Pokémon should learn a move?</h2></div><span class="money big-money">$${run.money.toLocaleString()}</span></div>
+    <div class="tutor-party">${run.party.map((m, i) => `<button class="${i === sel ? 'active' : ''}" data-act="tutorSel" data-arg="${i}">${img(spriteUrl(m.id, { shiny: m.shiny }), 'mini-sprite', monName(m))}<span>${esc(monName(m))}<small>Lv ${m.lv}</small></span></button>`).join('')}</div>
+    <h4>${esc(monName(mon))} knows</h4>
+    <div class="move-chips">${mon.moves.map(x => `<span class="move-chip" style="--tc:${TYPE_COLORS[MOVES[x.id].t]}">${esc(MOVES[x.id].n)}<small>${MOVES[x.id].t} · ${CAT[MOVES[x.id].c]}${MOVES[x.id].p ? ' · ' + MOVES[x.id].p : ''}</small></span>`).join('')}</div>
+    <h3>New moves</h3>
+    ${offers.length ? `<p class="small muted">Moves ${esc(monName(mon))} can learn from TMs and tutors. The selection changes at every Move Tutor.</p><div class="tutor-list">${offers.map(o => row(o.id, o.price)).join('')}</div>` : `<p class="muted small">${esc(monName(mon))} can't learn any new moves here.</p>`}
+    <h3>Move Reminder</h3>
+    ${remind.length ? `<p class="small muted">Moves ${esc(monName(mon))} learned by Lv ${mon.lv} (or on evolution), free to relearn.</p><div class="tutor-list">${remind.map(id => row(id, 0)).join('')}</div>` : '<p class="muted small">No moves to remember.</p>'}
+    <div class="row gap"><button data-act="openBag">Bag</button><button class="primary" data-act="leaveNode">Leave</button></div>
+  </section>`;
+}
+registerActions({
+  tutorSel: i => { S.run.node.sel = +i; render(); },
+  tutorTeach: arg => {
+    const [id, p] = arg.split('|');
+    const price = +p;
+    const run = S.run, mon = run.party[Math.min(run.node.sel || 0, run.party.length - 1)];
+    if (!mon || !MOVES[id] || mon.moves.some(x => x.id === id) || run.money < price) return;
+    if (price && tutorPrice(run, id) !== price) return;
+    if (mon.moves.length < 4) {
+      mon.moves.push({ id, pp: MOVES[id].pp });
+      run.money -= price;
+      if (price) track('tutor');
+      sfx('learn'); toast(`${monName(mon)} learned ${MOVES[id].n}!`);
+      persistRun(); render();
+      return;
+    }
+    queueFlow([{ type: 'learn', uid: mon.uid, move: id, cost: price, tutor: !!price }]);
+  },
+});
+
 function pcView() {
   const run = S.run;
   return `<div class="pc">
@@ -782,16 +821,6 @@ function pcView() {
 }
 
 registerActions({
-  spinStop: () => {
-    const n = S.run.node;
-    if (n.spun) return;
-    n.result = spinPokeStop(S.run);
-    n.spun = true;
-    track('stop');
-    sfx('coin');
-    persistRun();
-    render();
-  },
   buy: arg => {
     const [name, qty] = arg.split('|');
     const cost = priceOf(S.run, name) * +qty;
@@ -877,7 +906,7 @@ function renderModal() {
     body = `<div class="center-text">${img(artUrl(m.id, m.shiny), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
       <div class="abilities-preview">${[...sp.a.map(a => abilityInfo(a, false)), sp.h ? abilityInfo(sp.h, true) : ''].join('')}</div>
       <h4>Starting moves (Lv 5)</h4>
-      <div class="move-chips">${movesAtLevel(m.id, 5).map(x => `<span class="move-chip" style="--tc:${TYPE_COLORS[MOVES[x].t]}" title="${esc(MOVES[x].d || '')}">${esc(MOVES[x].n)}<small>${MOVES[x].t} · ${CAT[MOVES[x].c]}${MOVES[x].p ? ' · ' + MOVES[x].p : ''}</small></span>`).join('')}</div>
+      <div class="move-chips">${starterMoves(m.id, 5).map(x => `<span class="move-chip" style="--tc:${TYPE_COLORS[MOVES[x].t]}" title="${esc(MOVES[x].d || '')}">${esc(MOVES[x].n)}<small>${MOVES[x].t} · ${CAT[MOVES[x].c]}${MOVES[x].p ? ' · ' + MOVES[x].p : ''}</small></span>`).join('')}</div>
       <h4>Evolution</h4>
       ${evolutionChain(m.id)}
       <h4>Moveset <button class="small-btn" data-act="toggleLearnset">${m.showLearnset ? 'Hide' : 'Show'} all moves</button></h4>
@@ -922,6 +951,7 @@ function itemHint(item, mon) {
   const it = ITEMS[item];
   if (it.kind === 'evo') return itemEvolution(mon, item) ? '<span class="small good-text">Able</span>' : '<span class="small muted">Unable</span>';
   if (isHeld(item)) return `<span class="small muted">${mon.item ? `Holding ${esc(mon.item)}` : 'No item'}</span> ${heldNote(item, mon)}`;
+  if (it.kind === 'tm') return mon.moves.some(x => x.id === it.move) ? '<span class="small muted">Learned</span>' : canLearnMachine(mon.id, it.move) ? '<span class="small good-text">Able</span>' : '<span class="small muted">Unable</span>';
   if (it.kind === 'terashard') return `<span class="small muted">Tera ${esc(teraType(mon))}</span>`;
   if (it.kind === 'gmaxfactor') return FORMS[mon.id]?.gmax ? (mon.gf ? '<span class="small muted">Has it</span>' : '<span class="small good-text">Able</span>') : '<span class="small muted">Unable</span>';
   if (it.kind === 'mint') return `<span class="small muted">${esc(NATURES[mon.nat])}</span>`;
@@ -1204,6 +1234,21 @@ function useFieldItem(item, index) {
     run.bag[item]--;
     S.modal = null;
     queueFlow([{ type: 'evolve', uid: mon.uid, to, item }]);
+    return;
+  }
+  if (it.kind === 'tm') {
+    const id = it.move;
+    if (mon.moves.some(x => x.id === id)) { toast(`${monName(mon)} already knows ${MOVES[id].n}.`); sfx('error'); return; }
+    if (!canLearnMachine(mon.id, id) && !run.god) { toast(`${monName(mon)} can't learn ${MOVES[id].n}.`); sfx('error'); return; }
+    S.modal = null;
+    if (mon.moves.length < 4) {
+      mon.moves.push({ id, pp: MOVES[id].pp });
+      run.bag[item]--;
+      sfx('learn'); toast(`${monName(mon)} learned ${MOVES[id].n}!`);
+      persistRun(); render();
+      return;
+    }
+    queueFlow([{ type: 'learn', uid: mon.uid, move: id, tm: item }]);
     return;
   }
   if (HELD_KINDS.includes(it.kind)) {
@@ -1606,6 +1651,10 @@ registerActions({
     const mon = findMon(step.uid);
     const old = MOVES[mon.moves[+i].id].n;
     replaceMove(mon, +i, step.move);
+    // TMs are used up and tutors are paid only when the move is actually learned
+    if (step.tm && S.run.bag[step.tm] > 0) S.run.bag[step.tm]--;
+    if (step.cost) S.run.money = Math.max(0, S.run.money - step.cost);
+    if (step.tutor) track('tutor');
     S.run.flow.splice(1, 0, { type: 'msg', text: `1, 2, and… Poof! ${monName(mon)} forgot ${old} and learned ${MOVES[step.move].n}!` });
     sfx('learn');
     flowAdvance();

@@ -2,6 +2,14 @@
 // Formulas follow the main-series games (Gen 5+ where they differ).
 import { DEX, MOVES, movesAtLevel, movesLearnedAt } from './data.js';
 
+/** A chosen starter's moves: like the games, plus any moves its species learns on evolution. */
+export function starterMoves(id, lv) {
+  const evo = movesLearnedAt(id, 0).filter(m => MOVES[m]).slice(0, 4);
+  const rest = movesAtLevel(id, lv).filter(m => !evo.includes(m));
+  const out = [...evo, ...rest.slice(Math.max(0, rest.length - (4 - evo.length)))];
+  return out.some(m => MOVES[m].c !== 'S') ? out : movesAtLevel(id, lv);
+}
+
 export const STAT_KEYS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
 export const STAT_LABELS = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed'];
 

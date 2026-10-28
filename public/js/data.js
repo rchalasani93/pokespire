@@ -6,10 +6,13 @@ export const TYPES = {};
 export const BY_NAME = {};
 export const ABILITIES = {};
 export const FORMS = {};
+/** TM / HM / tutor-compatible moves per species: MACHINES[id] = Set of move ids. */
+export const MACHINES = {};
+export const canLearnMachine = (id, move) => !!MACHINES[id]?.has(move);
 
 export async function loadData() {
-  const files = ['pokedex', 'moves', 'learnsets', 'types', 'abilities', 'forms'];
-  const [dex, moves, learn, types, abilities, forms] = await Promise.all(
+  const files = ['pokedex', 'moves', 'learnsets', 'types', 'abilities', 'forms', 'machines'];
+  const [dex, moves, learn, types, abilities, forms, machines] = await Promise.all(
     files.map(f => fetch(new URL(`../data/${f}.json`, import.meta.url)).then(r => {
       if (!r.ok) throw new Error(`Failed to load ${f}.json`);
       return r.json();
@@ -21,9 +24,16 @@ export async function loadData() {
   Object.assign(TYPES, types);
   Object.assign(ABILITIES, abilities);
   Object.assign(FORMS, forms);
+  loadMachines(machines);
   for (const [id, s] of Object.entries(DEX)) {
     s.id = +id;
     BY_NAME[s.n.toLowerCase()] = +id;
+  }
+}
+
+export function loadMachines(machines) {
+  for (const [id, packed] of Object.entries(machines.s)) {
+    MACHINES[id] = new Set(packed ? packed.split(',').map(i => machines.moves[parseInt(i, 36)]) : []);
   }
 }
 

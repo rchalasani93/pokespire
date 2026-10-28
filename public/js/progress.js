@@ -76,7 +76,7 @@ const DAILY_POOL = [
   { id: 'villain2', text: 'Beat 2 villain team battles', ev: 'win:villain', target: 2, pts: 200 },
   { id: 'evolve1', text: 'Evolve a Pokémon', ev: 'evolve', target: 1, pts: 150 },
   { id: 'money500', text: 'Earn $500 in prize money', ev: 'money', target: 500, pts: 150 },
-  { id: 'stops3', text: 'Spin 3 PokéStops', ev: 'stop', target: 3, pts: 100 },
+  { id: 'tutor2', text: 'Teach 2 moves at a Move Tutor', ev: 'tutor', target: 2, pts: 100 },
   { id: 'wins10', text: 'Win 10 battles', ev: 'win', target: 10, pts: 200 },
   { id: 'elite1', text: 'Defeat or catch an Elite Pokémon', ev: 'win:elite', target: 1, pts: 200 },
   { id: 'act1', text: 'Clear an act', ev: 'actClear', target: 1, pts: 250 },

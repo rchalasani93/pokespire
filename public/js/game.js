@@ -1,9 +1,9 @@
 // Run structure: three acts of branching map nodes, encounters, rewards and progression.
-import { DEX, MOVES, FORMS, REGIONS, idOf, movesAtLevel, regionOf } from './data.js';
-import { createMon, stageForLevel, healMon, rand, pick, uid, maxHp, expForLevel, evoItemFor } from './mechanics.js';
+import { DEX, MOVES, FORMS, MACHINES, REGIONS, idOf, movesAtLevel, regionOf } from './data.js';
+import { createMon, stageForLevel, healMon, rand, pick, uid, maxHp, expForLevel, evoItemFor, starterMoves } from './mechanics.js';
 import {
   ITEMS, DIFFICULTIES, diffOf, CLASSIC, GAME_MODES, modeOf, TRAINER_CLASSES, TRAINER_NAMES, GYM_LEADERS, VILLAINS, ELITE_FOUR, CHAMPIONS, STONE_LIST, EVO_ITEM_LIST,
-  TYPE_BOOSTERS, Z_CRYSTALS, KEY_ITEMS, TYPE_LIST, MINT_NATURES,
+  TYPE_BOOSTERS, Z_CRYSTALS, KEY_ITEMS, TYPE_LIST, MINT_NATURES, TM_BY_MOVE,
 } from './content.js';
 
 export const ACTS = [
@@ -21,7 +21,8 @@ export const NODE_INFO = {
   elite: { icon: '⭐', label: 'Elite Pokémon', desc: 'A powerful wild Pokémon with superior stats. Rare rewards.' },
   gym: { icon: '🏅', label: 'Gym Battle', desc: 'A Gym Leader from any region. Win a badge.' },
   legendary: { icon: '✨', label: 'Legendary Pokémon', desc: 'A Legendary Pokémon appears! Your chance to catch it.' },
-  stop: { icon: '🔷', label: 'PokéStop', desc: 'Spin for free items.' },
+  tutor: { icon: '📖', label: 'Move Tutor', desc: 'Teach new moves for a fee, or relearn old ones for free.' },
+  stop: { icon: '📖', label: 'Move Tutor', desc: 'Teach new moves for a fee, or relearn old ones for free.' }, // old saves
   mart: { icon: '🏪', label: 'PokéMart', desc: 'Buy Poké Balls, medicine and evolution items.' },
   center: { icon: '🏥', label: 'Pokémon Center', desc: 'Fully heal your team and use the PC Box.' },
   boss: { icon: '👑', label: 'Boss', desc: 'The act boss.' },
@@ -53,7 +54,7 @@ export function rowLevel(act, row) {
 
 // ---------- New run ----------
 export function newRun(starterId, difficulty = 'medium', mode = 'classic', choice = {}) {
-  const starter = createMon(starterId, 5);
+  const starter = createMon(starterId, 5, { moves: starterMoves(starterId, 5) });
   starter.fr = 70;
   if (Number.isInteger(choice.nat) && choice.nat >= 0 && choice.nat < 25) starter.nat = choice.nat;
   if (choice.ab && [...DEX[starterId].a, DEX[starterId].h].includes(choice.ab)) starter.ab = choice.ab;
@@ -101,7 +102,7 @@ export function generateMap(act) {
   const ordered = Object.values(nodes).filter(n => n.id !== 'boss').sort((a, b) => a.r - b.r);
   const weights = r => ({
     wild: 28, trainer: 20, villain: act >= 2 ? 12 : 8, elite: r >= 3 ? 7 : 0, gym: r >= 3 ? 6 : 0,
-    stop: 9, mart: r >= 2 ? 7 : 3, center: r >= 3 && r <= 8 ? 7 : 0,
+    tutor: 9, mart: r >= 2 ? 7 : 3, center: r >= 3 && r <= 8 ? 7 : 0,
   });
   let gyms = 0;
   for (const n of ordered) {
@@ -112,7 +113,7 @@ export function generateMap(act) {
       if (gyms >= 2) w.gym = 0;
       const t = weighted(w);
       const parentTypes = (parents[n.id] || []).map(p => nodes[p].type);
-      if (['stop', 'mart', 'center', 'gym', 'elite'].includes(t) && parentTypes.includes(t)) continue;
+      if (['tutor', 'mart', 'center', 'gym', 'elite'].includes(t) && parentTypes.includes(t)) continue;
       n.type = t;
       break;
     }
@@ -332,25 +333,19 @@ export function leagueOpponent(run) {
 // ---------- Rewards ----------
 export function addItem(run, item, n = 1) { run.bag[item] = (run.bag[item] || 0) + n; }
 
-export function spinPokeStop(run) {
-  const act = run.act;
-  const ball = act === 1 ? 'Poké Ball' : act === 2 ? pick(['Poké Ball', 'Great Ball', 'Great Ball']) : pick(['Great Ball', 'Ultra Ball']);
-  const potion = act === 1 ? 'Potion' : act === 2 ? 'Super Potion' : 'Hyper Potion';
-  const items = [[ball, 2 + rand(3)], [potion, 1 + rand(2)]];
-  const r = Math.random();
-  if (r < 0.06) items.push(['Rare Candy', 1]);
-  else if (r < 0.1) items.push([act === 3 ? 'Gold Bottle Cap' : 'Bottle Cap', 1]);
-  else if (r < 0.22) items.push([pick(STONE_LIST), 1]);
-  else if (r < 0.28) items.push([act >= 2 ? pick(EVO_ITEM_LIST) : 'Linking Cord', 1]);
-  else if (r < 0.45) items.push([act === 3 ? 'Exp. Candy L' : act === 2 ? 'Exp. Candy M' : 'Exp. Candy S', 1 + rand(2)]);
-  else if (r < 0.6) items.push([diffOf(run).permadeath ? 'Full Heal' : 'Revive', 1]);
-  else items.push([pick(['Antidote', 'Paralyze Heal', 'Awakening', 'Burn Heal', 'Full Heal']), 1]);
-  if (Math.random() < 0.25) items.push(['Quick Ball', 1]);
-  for (const [it, n] of items) addItem(run, it, n);
-  let money = 0;
-  if (Math.random() < 0.3) { money = 50 * act + rand(4) * 25; run.money += money; }
-  return { items, money };
+/** Moves a Move Tutor offers a Pokémon: its TM/tutor moves, a rotating selection per visit. */
+export function tutorOffers(run, mon, nodeId) {
+  const known = new Set(mon.moves.map(x => x.id));
+  const all = [...(MACHINES[mon.id] || [])].filter(id => MOVES[id] && !known.has(id)).sort();
+  const seed = [...`${nodeId}${mon.uid}`].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const out = [];
+  for (let i = 0; i < all.length && out.length < 8; i++) {
+    const id = all[(seed + i * 37) % all.length];
+    if (!out.includes(id)) out.push(id);
+  }
+  return out.map(id => ({ id, price: tutorPrice(run, id) }));
 }
+export const tutorPrice = (run, id) => Math.round((100 + (MOVES[id].p || 50) * 3) * run.act * diffOf(run).priceMult / 2) * 2;
 
 export function martStock(run) {
   const act = run.act;
@@ -493,6 +488,7 @@ function rewardPool(run, tier) {
   if (tier === 'common') {
     add('Poké Ball', 5, 3); add('Potion', 3, 2); add('Super Potion', 2); add('Full Heal', 2); add('Oran Berry', 1);
     add('Exp. Candy S', 2); add('Revive', 1);
+    add(tmFor(run, 'common'), 1, 2.5);
   } else if (tier === 'great') {
     add('Great Ball', 5, 3); add('Hyper Potion', 2, 2); add('Revive', 2); add('Elixir', 2); add('Rare Candy', 1, 2); add('Exp. Candy M', 2);
     add('Sitrus Berry', 1, 2); add('Lum Berry', 1);
@@ -502,6 +498,7 @@ function rewardPool(run, tier) {
     add(`${pick(MINT_NATURES)} Mint`, 1);
     if (run.bag['Tera Orb']) add(`${pick(types.length ? types : TYPE_LIST)} Tera Shard`, 1, 2);
     add('Nugget', 1);
+    add(tmFor(run, 'great'), 1, 3);
   } else if (tier === 'ultra') {
     add('Ultra Ball', 5, 3); add('Max Revive', 1); add('Full Restore', 2); add('Max Elixir', 1); add('Rare Candy', 3); add('Exp. Candy L', 1);
     for (const h of HELD_ULTRA) add(h, 1, 0.6);
@@ -514,6 +511,7 @@ function rewardPool(run, tier) {
     if (run.bag['Dynamax Band'] && run.party.some(m => FORMS[m.id]?.gmax && !m.gf)) add('Max Mushrooms', 1, 2);
     for (const k of Object.keys(KEY_ITEMS)) if (!run.bag[k]) add(k, 1, 1.5);
     add('Big Nugget', 1, 0.5);
+    add(tmFor(run, 'ultra'), 1, 3);
   } else if (tier === 'rogue') {
     add('Focus Sash', 1); add('Gold Bottle Cap', 1); add('Ability Patch', 1); add('Exp. Candy L', 3);
     for (const k of Object.keys(KEY_ITEMS)) if (!run.bag[k]) add(k, 1, 3);
@@ -522,6 +520,21 @@ function rewardPool(run, tier) {
     add('Master Ball', 1);
   }
   return pool;
+}
+
+/** TMs a team member can learn and doesn't know yet; stronger moves come in higher tiers (like PokéRogue). */
+function tmFor(run, tier) {
+  const opts = [];
+  for (const m of run.party) {
+    const known = new Set(m.moves.map(x => x.id));
+    for (const id of MACHINES[m.id] || []) {
+      const mv = MOVES[id];
+      if (!mv || known.has(id) || !TM_BY_MOVE[id]) continue;
+      const t = mv.c === 'S' || mv.p <= 60 ? 'common' : mv.p <= 85 ? 'great' : 'ultra';
+      if (t === tier) opts.push(TM_BY_MOVE[id]);
+    }
+  }
+  return opts.length ? pick(opts) : null;
 }
 
 function rollTier(boss) {

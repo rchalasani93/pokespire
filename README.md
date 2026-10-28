@@ -64,7 +64,7 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 | ⭐ Elite Pokémon | Powerful wild Pokémon with perfect IVs and rare drops |
 | 🏅 Gym Battle | A random Gym Leader from any region, with badges |
 | ✨ Legendary | One Legendary or Mythical encounter per act |
-| 🔷 PokéStop | Spin for free items |
+| 📖 Move Tutor | Teach TM/tutor moves for money, or relearn old moves for free |
 | 🏪 PokéMart | Buy balls, medicine, Exp. Candy and evolution items |
 | 🏥 Pokémon Center | Full heal, plus the PC Box |
 | 👑 Boss | Act I: a Gym Leader. Act II: a villain team boss. Act III: four random Elite Four members from across the regions, then a random Champion, then the **Hall of Fame** |

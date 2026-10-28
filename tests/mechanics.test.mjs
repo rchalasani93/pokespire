@@ -1,9 +1,9 @@
 // Run with: node tests/mechanics.test.mjs
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { DEX, MOVES, LEARN, TYPES, BY_NAME, FORMS } from '../public/js/data.js';
+import { DEX, MOVES, LEARN, TYPES, BY_NAME, FORMS, MACHINES, loadMachines, canLearnMachine } from '../public/js/data.js';
 const load = f => JSON.parse(readFileSync(new URL(`../public/data/${f}.json`, import.meta.url)));
-Object.assign(DEX, load('pokedex')); Object.assign(MOVES, load('moves')); Object.assign(LEARN, load('learnsets')); Object.assign(TYPES, load('types')); Object.assign(FORMS, load('forms'));
+Object.assign(DEX, load('pokedex')); Object.assign(MOVES, load('moves')); Object.assign(LEARN, load('learnsets')); Object.assign(TYPES, load('types')); Object.assign(FORMS, load('forms')); loadMachines(load('machines'));
 for (const [id, s] of Object.entries(DEX)) { s.id = +id; BY_NAME[s.n.toLowerCase()] = +id; }
 
 const M = await import('../public/js/mechanics.js');
@@ -11,6 +11,7 @@ const G = await import('../public/js/game.js');
 const Bt = await import('../public/js/battle.js');
 const C = await import('../public/js/content.js');
 C.registerFormItems(FORMS, DEX);
+C.registerTMItems(MOVES, [...new Set(Object.values(MACHINES).flatMap(x => [...x]))]);
 
 // Stat formula — Bulbapedia's Garchomp example (Lv 78, Adamant)
 const chomp = { id: 445, lv: 78, nat: M.NATURES.indexOf('Adamant'), iv: [24, 12, 30, 16, 23, 5], ev: [74, 190, 91, 48, 84, 23] };
@@ -334,3 +335,30 @@ console.log(`All mechanics tests passed (${turns} simulated battle turns).`);
   }
 }
 console.log('Battle gimmick, held item and reward tests passed.');
+
+// ---------- TMs, evolved starters, Move Tutor ----------
+{
+  assert.ok(canLearnMachine(6, 'flamethrower'), 'Charizard can learn Flamethrower by TM');
+  assert.ok(canLearnMachine(130, 'surf') && C.ITEMS['HM Surf'], 'HM Surf exists');
+  assert.ok(!canLearnMachine(129, 'flamethrower'), 'Magikarp cannot');
+  // Evolution moves are part of an evolved starter's moveset
+  const sm = M.starterMoves(6, 5);
+  assert.ok(sm.includes('airslash'), 'Charizard starts with Air Slash: ' + sm);
+  assert.ok(sm.length <= 4);
+  const run = G.newRun(6, 'medium', 'random');
+  assert.ok(run.party[0].moves.some(m => m.id === 'airslash'));
+  // Rewards include TMs sometimes, always ones the team can learn
+  let tms = 0;
+  for (let i = 0; i < 300; i++) for (const o of G.generateRewards(run, 'gym')) if (C.ITEMS[o.item].kind === 'tm') {
+    tms++;
+    assert.ok(run.party.some(m => canLearnMachine(m.id, C.ITEMS[o.item].move)));
+  }
+  assert.ok(tms > 0, 'TMs appear in rewards');
+  const offers = G.tutorOffers(run, run.party[0], '3-2');
+  assert.ok(offers.length > 0 && offers.every(o => canLearnMachine(6, o.id) && o.price > 0));
+  // Maps have Move Tutors and no PokéStops
+  const map = G.generateMap(1);
+  const types = Object.values(map.nodes).map(n => n.type);
+  assert.ok(!types.includes('stop'));
+}
+console.log('TM, starter move and Move Tutor tests passed.');

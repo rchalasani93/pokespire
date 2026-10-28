@@ -29,6 +29,8 @@ const byName = Object.fromEntries(base.map(s => [s.name, s]));
 const pokedex = {};
 const learnsets = {};
 const usedMoves = new Set();
+const machine = {}; // TM / HM / tutor-compatible moves per species (any generation)
+const okMove = id => { const m = Dex.moves.get(id); return m.exists && !m.isZ && !m.isMax && !['CAP', 'LGPE', 'Custom', 'Gigantamax'].includes(m.isNonstandard); };
 
 for (const s of base) {
   const c = speciesCsv[s.num] || {};
@@ -46,6 +48,9 @@ for (const s of base) {
   const list = (byGen[gen] || []).sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]));
   list.forEach(([, m]) => usedMoves.add(m));
   learnsets[s.num] = list;
+  const tm = Object.entries(ls || {}).filter(([mv, src]) => src.some(x => /^\d[MT]$/.test(x)) && okMove(mv)).map(([mv]) => mv);
+  tm.forEach(m => usedMoves.add(m));
+  machine[s.num] = tm;
 
   const evos = (s.evos || []).map(n => byName[n]).filter(Boolean).map(e => {
     const evo = { to: e.num };
@@ -182,6 +187,11 @@ for (const f of Dex.species.all()) {
 
 mkdirSync('public/data', { recursive: true });
 writeFileSync('public/data/forms.json', JSON.stringify(forms));
+// TM/HM/tutor compatibility, packed as indexes into one move list
+const tmMoves = [...new Set(Object.values(machine).flat())].filter(m => moves[m]).sort();
+const tmIndex = Object.fromEntries(tmMoves.map((m, i) => [m, i.toString(36)]));
+const tmSpecies = Object.fromEntries(Object.entries(machine).map(([num, list]) => [num, list.filter(m => tmIndex[m]).map(m => tmIndex[m]).join(',')]));
+writeFileSync('public/data/machines.json', JSON.stringify({ moves: tmMoves, s: tmSpecies }));
 writeFileSync('public/data/pokedex.json', JSON.stringify(pokedex));
 writeFileSync('public/data/moves.json', JSON.stringify(moves));
 writeFileSync('public/data/learnsets.json', JSON.stringify(learnsets));

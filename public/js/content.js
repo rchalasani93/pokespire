@@ -143,6 +143,22 @@ ITEMS['Big Nugget'] = { kind: 'valuable', value: 2000, price: 0, slug: 'big-nugg
 export const MINT_NATURES = ['Lonely', 'Adamant', 'Naughty', 'Brave', 'Bold', 'Impish', 'Lax', 'Relaxed', 'Modest', 'Mild', 'Rash', 'Quiet', 'Calm', 'Gentle', 'Careful', 'Sassy', 'Timid', 'Hasty', 'Jolly', 'Naive', 'Serious'];
 for (const n of MINT_NATURES) ITEMS[`${n} Mint`] = { kind: 'mint', nature: n, price: 0, slug: `${n.toLowerCase()}-mint`, desc: `Changes a Pokémon's stats to match the ${n} nature.` };
 
+// ---------- TMs and HMs (single use, like Scarlet/Violet) ----------
+export const HM_MOVES = ['cut', 'fly', 'surf', 'strength', 'flash', 'rocksmash', 'waterfall', 'dive', 'whirlpool', 'defog', 'rockclimb'];
+export const TM_BY_MOVE = {};
+/** One TM (or HM) item per move any Pokémon can learn from a machine or tutor. */
+export function registerTMItems(MOVES, moveIds) {
+  for (const id of moveIds) {
+    const mv = MOVES[id];
+    if (!mv || TM_BY_MOVE[id]) continue;
+    const hm = HM_MOVES.includes(id);
+    const name = `${hm ? 'HM' : 'TM'} ${mv.n}`;
+    const cat = { P: 'Physical', X: 'Special', S: 'Status' }[mv.c];
+    ITEMS[name] = { kind: 'tm', move: id, price: 0, slug: `${hm ? 'hm' : 'tm'}-${mv.t.toLowerCase()}`, desc: `Teaches ${mv.n} (${mv.t} · ${cat}${mv.p ? ` · Pow ${mv.p}` : ''}). ${mv.d || ''} Used up once learned.` };
+    TM_BY_MOVE[id] = name;
+  }
+}
+
 /** Mega Stones and the Primal orbs come from the form data, so they're added after it loads. */
 export function registerFormItems(FORMS, DEX) {
   for (const [id, f] of Object.entries(FORMS)) {
@@ -203,6 +219,7 @@ export const BAG_POCKETS = [
   ['Training', ['candy', 'expcandy', 'vitamin', 'cap']],
   ['Evolution', ['evo', 'gmaxfactor']],
   ['Held items', ['held', 'mega', 'z']],
+  ['TMs', ['tm']],
   ['Other', ['terashard', 'mint', 'capsule', 'patch', 'valuable']],
   ['Key items', ['key']],
 ];
