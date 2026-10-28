@@ -51,6 +51,7 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 - Pokémon learn moves from their level-up learnsets (latest generation available). With four moves already known, you pick a move to forget or skip the new one.
 - Evolution works by level, by item (stones and held items), by friendship (including day/night conditions), and by knowing a move. Trade evolutions and other special conditions use a Linking Cord. Evolution happens after battle and can be cancelled. Evolution moves are learned on evolving.
 - Damage uses the Gen 5+ formula: STAB, type effectiveness, critical-hit stages, the random roll, burn, and the physical/special split. Battles also track stat stages, accuracy and evasion, priority, speed order, all major status conditions, confusion, flinching, recoil, drain, multi-hit, OHKO moves, charge and recharge turns, Protect, and a set of common abilities.
+- Status conditions follow the main games and show under the HP bar: burn (1/16 HP per turn, halves physical damage), paralysis (Speed halved, 25% chance to be unable to move), poison (1/8), bad poison (1/16, 2/16, … and back to regular poison after battle), sleep (1–3 turns) and freeze (20% thaw chance per turn; Fire moves, Scald and self-thawing moves like Flame Wheel thaw it). Type immunities apply, including Grass types against powder moves.
 - Catching uses the Gen 5+ catch formula with ball and status modifiers and shake checks.
 
 **The map.** Each act is a branching map with these nodes:

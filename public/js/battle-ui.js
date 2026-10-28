@@ -81,9 +81,9 @@ export function resumeBattleUI() {
 // ---------- Rendering ----------
 function battleScreen() {
   const run = S.run;
-  const b = run.battle;
+  const b = run.battle || S.lastBattle;
   if (!b) return '';
-  const v = B.view || battleView(run);
+  const v = B.view || (run.battle ? battleView(run) : { p: null, e: null });
   const P = v.p, E = v.e;
   const pMon = run.party.find(m => m.uid === P?.uid);
   let expPct = 0;
@@ -94,14 +94,16 @@ function battleScreen() {
   const fx = B.fx || {};
   const enemyBalls = b.trainer ? `<div class="team-balls">${b.enemy.map(m => `<i class="${m.hp > 0 ? '' : 'out'}"></i>`).join('')}</div>` : '';
   const scene = `<div class="scene kind-${b.kind}">
-    <div class="wallet-chip">$${run.money.toLocaleString()} · ${(run.score || 0).toLocaleString()} pts</div>
-    ${run.god ? '<div class="god-chip">⚡ GOD</div>' : ''}
     ${b.trainer ? `<img class="trainer-sprite" src="${trainerSpriteUrl(b.trainer.sprite)}" alt="" onerror="this.remove()">` : ''}
+    <div class="foe-col">
     <div class="hud foe">
       <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} ${E ? caughtMark(E.id) : ''}</strong><span>Lv ${E?.lv}</span></div>
       <div class="hud-types">${E ? DEX[E.id].t.map(typeBadge).join('') : ''}</div>
       ${E ? hpBar(E.hp, E.max) : ''}
-      <div class="row small">${statusTag(E?.st)}${b.enemy[b.ei]?.elite ? '<span class="elite-tag">ELITE</span>' : ''}${enemyBalls}</div>
+      <div class="row small status-line"><span>${statusTag(E?.st)}${b.enemy[b.ei]?.elite ? '<span class="elite-tag">ELITE</span>' : ''}</span>${enemyBalls}</div>
+    </div>
+    <div class="wallet-chip">$${run.money.toLocaleString()} · ${(run.score || 0).toLocaleString()} pts</div>
+    ${run.god ? '<div class="god-chip">⚡ GOD</div>' : ''}
     </div>
     <div class="sprite-wrap foe ${fx.hit === 'e' ? 'hit' : ''} ${fx.faint === 'e' || (E && E.hp <= 0) ? 'fainted' : ''} ${B.captured ? 'captured' : ''} ${fx.send === 'e' ? 'sendout' : ''} ${E?.shiny ? 'is-shiny' : ''} ${fx.sparkle ? 'sparkle' : ''}">
       ${E ? `<img src="${spriteUrl(E.id, { shiny: E.shiny })}" alt="${esc(E.name)}">` : ''}
@@ -113,17 +115,37 @@ function battleScreen() {
       <div class="row"><strong>${esc(P?.name)}${P?.shiny ? ' ✦' : ''}</strong><span>Lv ${P?.lv}</span></div>
       <div class="hud-types">${P ? DEX[P.id].t.map(typeBadge).join('') : ''}</div>
       ${P ? hpBar(P.hp, P.max) : ''}
-      <div class="row small"><span>${statusTag(P?.st)}</span><span>${P?.hp}/${P?.max}</span></div>
+      <div class="row small status-line"><span>${statusTag(P?.st)}</span><span>${P?.hp}/${P?.max}</span></div>
       <div class="expbar"><i style="width:${expPct}%"></i></div>
     </div>
   </div>`;
+  const step = run.flow?.[0];
+  const inline = step && ['msg', 'learn'].includes(step.type) ? inlineFlow(step) : null;
+  const text = inline ? inline.text : B.text;
   return `<section class="battle">
     ${scene}
     <div class="battle-bottom">
-      <button class="textbox silent" data-act="advance" aria-live="polite">${esc(B.text)}${B.playing ? '<span class="more">▼</span>' : ''}</button>
-      <div class="controls">${B.playing ? '' : controls()}</div>
+      <button class="textbox silent" data-act="advance" aria-live="polite">${esc(text)}${B.playing || inline?.more ? '<span class="more">▼</span>' : ''}</button>
+      <div class="controls">${inline ? inline.controls : B.playing || !run.battle ? '' : controls()}</div>
     </div>
   </section>`;
+}
+
+/** Post-battle messages and move-learning prompts, shown in the text box like the main games. */
+function inlineFlow(step) {
+  if (step.type === 'msg') {
+    return { text: step.text, more: true, controls: '<div class="action-grid"><button class="primary" data-act="flowNext">Continue</button></div>' };
+  }
+  const mon = [...S.run.party, ...S.run.box].find(m => m.uid === step.uid);
+  const mv = MOVES[step.move];
+  if (!mon) return { text: '', controls: '<div class="action-grid"><button data-act="flowNext">Continue</button></div>' };
+  const name = monName(mon);
+  return {
+    text: `${name} wants to learn ${mv.n}, but ${name} already knows four moves. Forget a move to make room for ${mv.n}?`,
+    controls: `<div class="learn-new" style="--tc:${TYPE_COLORS[mv.t]}"><strong>${esc(mv.n)}</strong> <span>${mv.t} · ${mv.c === 'S' ? 'Status' : `Pow ${mv.p}`} · ${mv.pp} PP</span><small>${esc(mv.d || '')}</small></div>
+      <div class="move-grid">${mon.moves.map((x, i) => { const m = MOVES[x.id]; return `<button class="move" style="--tc:${TYPE_COLORS[m.t]}" data-act="forgetMove" data-arg="${i}" title="${esc(m.d || '')}"><strong>Forget ${esc(m.n)}</strong><span>${m.t} · ${x.pp}/${m.pp} PP</span></button>`; }).join('')}</div>
+      <button class="ghost back-btn" data-act="skipLearn">Don't learn ${esc(mv.n)}</button>`,
+  };
 }
 
 function controls() {
@@ -191,7 +213,10 @@ export function onBattleAction(action) {
 export function initBattleUI() {
   SCREENS.battle = battleScreen;
   registerActions({
-  advance: () => { if (B.playing) playNext(); },
+  advance: () => {
+    if (B.playing) playNext();
+    else if (S.run?.flow?.[0]?.type === 'msg') document.querySelector('[data-act=flowNext]')?.click();
+  },
   bMode: m => { B.mode = m; render(); },
   bMove: i => onBattleAction({ type: 'move', index: +i }),
   bRun: () => onBattleAction({ type: 'run' }),

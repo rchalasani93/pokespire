@@ -155,7 +155,7 @@ export function initSocialUI() {
       const [period, id] = arg.split('|');
       try {
         const pts = await claimMission(period, id);
-        if (pts) { sfx('achievement'); toast(`+${pts.toLocaleString()} points claimed!`); }
+        if (pts) sfx('achievement');
         persistProfile();
         refreshMissionCount();
         S.scores = await api.scores().catch(() => S.scores);

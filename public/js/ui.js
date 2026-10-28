@@ -31,7 +31,8 @@ export function go(screen, ui = {}) {
 export function render() {
   const fn = SCREENS[S.screen];
   const html = fn ? fn() : '';
-  app().innerHTML = html + (S.modal ? renderModal() : '') + (S.run?.flow?.length && S.screen !== 'battle-playing' ? renderFlow() : '');
+  const inlineFlow = S.screen === 'battle' && ['msg', 'learn'].includes(S.run?.flow?.[0]?.type);
+  app().innerHTML = html + (S.modal ? renderModal() : '') + (S.run?.flow?.length && !inlineFlow ? renderFlow() : '');
   document.getElementById('topbar-user').innerHTML = S.user
     ? `<span>${esc(S.user.username)}</span>${S.run && S.screen !== 'menu' ? ` · <span class="money">$${S.run.money.toLocaleString()}</span>` : ''}`
     : '';
@@ -102,7 +103,7 @@ document.addEventListener('input', e => {
 });
 
 setProgressHooks({
-  onUnlock: a => { sfx('achievement'); toast(`🏆 Achievement unlocked: ${a.name} (+${a.pts} pts)`); },
+  onUnlock: a => { sfx('achievement'); toast(`🏆 Achievement unlocked: ${a.name}`); },
   onChange: () => { persistProfile(); refreshMissionCount(); },
 });
 
@@ -115,8 +116,16 @@ export function hpBar(hp, max) {
   const cls = pct > 50 ? 'good' : pct > 20 ? 'warn' : 'bad';
   return `<div class="hpbar"><i class="${cls}" style="width:${pct}%"></i></div>`;
 }
-const STATUS_LABEL = { brn: 'BRN', par: 'PAR', psn: 'PSN', tox: 'TOX', slp: 'SLP', frz: 'FRZ' };
-export const statusTag = st => (st ? `<span class="status ${st}">${STATUS_LABEL[st]}</span>` : '');
+const STATUS_LABEL = { brn: 'BRN', par: 'PAR', psn: 'PSN', tox: 'PSN', slp: 'SLP', frz: 'FRZ' };
+const STATUS_TITLE = {
+  brn: 'Burned: loses 1/16 HP each turn; physical moves deal half damage',
+  par: 'Paralyzed: Speed halved; 25% chance to be unable to move',
+  psn: 'Poisoned: loses 1/8 HP each turn',
+  tox: 'Badly poisoned: loses more HP each turn (1/16, 2/16, 3/16…)',
+  slp: 'Asleep: can\'t move for 1–3 turns',
+  frz: 'Frozen: can\'t move; 20% chance to thaw each turn, or when hit by a Fire move',
+};
+export const statusTag = st => (st ? `<span class="status ${st}" title="${STATUS_TITLE[st]}">${STATUS_LABEL[st]}</span>` : '');
 const img = (src, cls = '', alt = '') => `<img class="${cls}" src="${src}" alt="${esc(alt)}" loading="lazy" onerror="this.style.visibility='hidden'">`;
 const itemImg = name => img(itemIconUrl(ITEMS[name]?.slug || 'poke-ball'), 'item-icon', name);
 
@@ -1345,7 +1354,7 @@ registerActions({
 
 // Continuations after a flow finishes (by name so they survive a reload)
 const FLOW_THEN = {
-  map: () => { S.run.node = null; persistRun(); go('map'); },
+  map: () => { S.lastBattle = null; S.run.node = null; persistRun(); go('map'); },
   league: () => go('league'),
   actDone: () => go('actDone'),
   hallOfFame: () => go('hallOfFame'),
@@ -1380,12 +1389,13 @@ export function finishBattle() {
   }
 
   // Points, missions and achievements
-  if (result === 'win') { const pts = battleWon(b.kind, b.enemy); if (pts) steps.push({ type: 'msg', text: `+${pts.toLocaleString()} points!` }); }
+  if (result === 'win') battleWon(b.kind, b.enemy);
   if (result === 'caught') {
-    let pts = caughtEvents(b.caughtMon);
-    if (b.kind === 'elite' || b.kind === 'legendary') pts += battleWon(b.kind, b.enemy);
-    if (pts) steps.push({ type: 'msg', text: `+${pts.toLocaleString()} points!` });
+    caughtEvents(b.caughtMon);
+    if (b.kind === 'elite' || b.kind === 'legendary') battleWon(b.kind, b.enemy);
   }
+  // Like the main games, bad poison becomes regular poison once the battle ends
+  for (const m of run.party) if (m.st === 'tox') m.st = 'psn';
   if (run.money > (b.moneyStart ?? run.money)) track('money', run.money - b.moneyStart);
   for (const m of run.party) if (m.lv >= 100 && !m.l100) { m.l100 = true; track('level100'); }
   checkAchievements();
@@ -1430,15 +1440,16 @@ export function finishBattle() {
     if (isActBoss && (b.kind === 'gym' || b.kind === 'villainBoss')) {
       then = 'actDone';
       track('actClear');
-      const pts = addRunPoints(POINTS.actClear);
-      if (pts) steps.push({ type: 'msg', text: `Act cleared! +${pts.toLocaleString()} points!` });
+      addRunPoints(POINTS.actClear);
     }
     if (b.kind === 'e4') { run.league.stage++; then = 'league'; }
     if (b.kind === 'champion') { run.league.stage++; then = 'hallOfFame'; }
   }
+  // Messages and move prompts after the battle play in the battle text box
+  S.lastBattle = run.battle;
   run.battle = null;
   if (steps.length) queueFlow(steps, then);
-  else { persistRun(); FLOW_THEN[then](); }
+  else { S.lastBattle = null; persistRun(); FLOW_THEN[then](); }
 }
 
 // ---------- Act transitions, League, Hall of Fame ----------

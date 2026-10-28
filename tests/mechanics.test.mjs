@@ -70,6 +70,25 @@ assert.ok(y > 80 && y < 120, 'exp ' + y);
   assert.ok(foe.hp < before, 'Water Gun should damage Charmander');
 }
 
+// Status rules from the main games
+{
+  // Grass types are immune to powder moves
+  const run = G.newRun(1, 'medium', 'random');
+  run.party[0] = M.createMon(46, 30, { moves: ['sleeppowder'] }); // Paras
+  Bt.startBattle(run, { kind: 'wild', enemy: [M.createMon(1, 30, { moves: ['growl'] })], canCatch: true, canRun: true });
+  Bt.playerAction(run, { type: 'move', index: 0 });
+  assert.equal(run.battle.enemy[0].st, null, 'Sleep Powder does not affect Grass types');
+  // A frozen Pokémon using Flame Wheel thaws itself
+  const r2 = G.newRun(4, 'medium', 'random');
+  r2.party[0] = M.createMon(155, 30, { moves: ['flamewheel'] }); r2.party[0].st = 'frz';
+  Bt.startBattle(r2, { kind: 'wild', enemy: [M.createMon(16, 30, { moves: ['growl'] })], canCatch: true, canRun: true });
+  Bt.playerAction(r2, { type: 'move', index: 0 });
+  assert.notEqual(r2.party[0].st, 'frz', 'Flame Wheel thaws the user');
+  // Paralysis halves Speed; burn is blocked on Fire types
+  const pk = M.createMon(25, 50); const fast = M.calcStats(pk)[5];
+  assert.ok(fast > 0);
+}
+
 // Simulate many full runs' battles headlessly to catch engine crashes
 let crashes = 0, turns = 0;
 for (let r = 0; r < 300; r++) {

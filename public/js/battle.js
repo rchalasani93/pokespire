@@ -7,6 +7,10 @@ import {
 } from './mechanics.js';
 import { ITEMS, diffOf } from './content.js';
 
+// Moves that thaw a frozen user (and, for some, a frozen target), and powder moves Grass types ignore
+const THAW_USER = new Set(['flamewheel', 'sacredfire', 'flareblitz', 'fusionflare', 'scald', 'steameruption', 'burnup', 'pyroball', 'scorchingsands', 'matchagotcha']);
+const THAW_TARGET = new Set(['scald', 'steameruption', 'scorchingsands']);
+const POWDER = new Set(['sleeppowder', 'stunspore', 'poisonpowder', 'spore', 'ragepowder', 'cottonspore', 'magicpowder', 'powder']);
 const STAT_KEYS_LONG = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed'];
 const STRUGGLE = { n: 'Struggle', t: '???', c: 'P', p: 50, a: 0, pp: 1, recoilMax: 0.25 };
 const STAGE_NAMES = { atk: 'Attack', def: 'Defense', spa: 'Sp. Atk', spd: 'Sp. Def', spe: 'Speed', accuracy: 'accuracy', evasion: 'evasiveness' };
@@ -342,7 +346,9 @@ function useMove(run, out, side, moveIdx) {
 
   // Status that prevents moving
   if (user.st === 'frz') {
-    if (Math.random() < 0.2) { user.st = null; say(run, out, `${uname} thawed out!`); }
+    const intended = vol.charging || user.moves[moveIdx]?.id;
+    if (THAW_USER.has(intended)) { user.st = null; say(run, out, `${uname} thawed out!`); }
+    else if (Math.random() < 0.2) { user.st = null; say(run, out, `${uname} thawed out!`); }
     else { say(run, out, `${uname} is frozen solid!`); return; }
   }
   if (user.st === 'slp') {
@@ -416,6 +422,9 @@ function useMove(run, out, side, moveIdx) {
     }
   }
 
+  // Grass types (and Overcoat) are immune to powder moves (Gen 6+)
+  if (!selfTarget && POWDER.has(moveId) && (DEX[target.id].t.includes('Grass') || target.ab === 'Overcoat')) { say(run, out, `It doesn't affect ${tname}...`); return; }
+
   if (mv.c === 'S') { statusMove(run, out, side, mv, tSide, tMon, tname); return; }
 
   // Immunities
@@ -483,7 +492,7 @@ function useMove(run, out, side, moveIdx) {
   if (mv.selfBoosts && user.hp > 0) boost(run, out, side, mv.selfBoosts, user);
   if (mv.recharge) vol.recharge = true;
   // Fire moves thaw a frozen target
-  if (mv.t === 'Fire' && target.st === 'frz' && target.hp > 0) { target.st = null; say(run, out, `${monName(target)} thawed out!`); }
+  if ((mv.t === 'Fire' || THAW_TARGET.has(moveId)) && target.st === 'frz' && target.hp > 0) { target.st = null; say(run, out, `${monName(target)} thawed out!`); }
 }
 
 function absorbs(ability, type) {
