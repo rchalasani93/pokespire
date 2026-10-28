@@ -154,7 +154,7 @@ const STATUS_TITLE = {
   frz: 'Frozen: can\'t move; 20% chance to thaw each turn, or when hit by a Fire move',
 };
 export const statusTag = st => (st ? `<span class="status ${st}" title="${STATUS_TITLE[st]}">${STATUS_LABEL[st]}</span>` : '');
-const img = (src, cls = '', alt = '') => `<img class="${cls}" src="${src}" alt="${esc(alt)}" loading="lazy" onerror="this.style.visibility='hidden'">`;
+const img = (src, cls = '', alt = '') => `<img class="${cls}" src="${src}" alt="${esc(alt)}" loading="lazy" data-onerror="hide">`;
 const itemImg = name => img(itemIconUrl(ITEMS[name]?.slug || 'poke-ball'), 'item-icon', name);
 
 function monCard(m, i, { action = 'showSummary', extra = '' } = {}) {
@@ -1966,7 +1966,7 @@ export async function endRun(result, defeatedBy = null) {
   cancelRunSave();
   const reached = run.league ? (run.league.stage >= 5 ? 'Hall of Fame' : run.league.stage === 4 ? 'Champion' : `Elite Four ${run.league.stage + 1}`) : `Act ${run.act}, floor ${run.pos ? run.map.nodes[run.pos].r + 1 : 0}`;
   const entry = {
-    result, difficulty: run.difficulty || 'medium', mode: modeOf(run), god: !!run.godUsed, score: run.godUsed ? 0 : (run.score || 0), starter: run.starter, act: run.act, reached, badges: run.badges.length,
+    runId: run.id, result, difficulty: run.difficulty || 'medium', mode: modeOf(run), god: !!run.godUsed, score: run.godUsed ? 0 : (run.score || 0), starter: run.starter, act: run.act, reached, badges: run.badges.length,
     caught: run.stats.caught, wins: run.stats.wins, team: partySummary(run.party),
     startedAt: run.startedAt, durationMin: Math.round((Date.now() - new Date(run.startedAt).getTime()) / 60000),
     ...(defeatedBy ? { defeatedBy } : {}),

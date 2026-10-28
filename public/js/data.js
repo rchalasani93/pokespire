@@ -13,7 +13,7 @@ export const canLearnMachine = (id, move) => !!MACHINES[id]?.has(move);
 export async function loadData() {
   const files = ['pokedex', 'moves', 'learnsets', 'types', 'abilities', 'forms', 'machines'];
   const [dex, moves, learn, types, abilities, forms, machines] = await Promise.all(
-    files.map(f => fetch(new URL(`../data/${f}.json`, import.meta.url)).then(r => {
+    files.map(f => fetch(new URL(`data/${f}.json`, document.baseURI)).then(r => {
       if (!r.ok) throw new Error(`Failed to load ${f}.json`);
       return r.json();
     }))

@@ -72,12 +72,18 @@ export const api = {
     return { history: data.map(r => ({ id: r.id, result: r.result, createdAt: r.created_at, ...r.data })) };
   },
 
+  /** Ends the run on the server, which checks the score against its own record of the run. Returns the score kept. */
   async addHistory(entry) {
+    const { data, error } = await sb.rpc('finish_run', { entry });
+    if (!error) return data;
+    // Before the server check is installed, fall back to a plain insert
+    if (!/finish_run|PGRST202|function/i.test(error.message || '') && error.code !== 'PGRST202') fail(error);
     const id = await currentUserId();
     const score = Math.max(0, Math.min(1000000, Math.round(entry.score || 0)));
-    const { error } = await sb.from('history').insert({ user_id: id, result: String(entry.result).slice(0, 40), data: entry, score });
-    fail(error);
+    const { error: e2 } = await sb.from('history').insert({ user_id: id, result: String(entry.result).slice(0, 40), data: entry, score });
+    fail(e2);
     await api.deleteRun();
+    return score;
   },
 
   async deleteRun() {

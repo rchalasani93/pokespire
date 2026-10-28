@@ -97,7 +97,7 @@ function battleScreen() {
   const fx = B.fx || {};
   const enemyBalls = b.trainer ? `<div class="team-balls">${b.enemy.map(m => `<i class="${m.hp > 0 ? '' : 'out'}"></i>`).join('')}</div>` : '';
   const scene = `<div class="scene kind-${b.kind}">
-    ${b.trainer ? `<img class="trainer-sprite" src="${trainerSpriteUrl(b.trainer.sprite)}" alt="" onerror="this.remove()">` : ''}
+    ${b.trainer ? `<img class="trainer-sprite" src="${trainerSpriteUrl(b.trainer.sprite)}" alt="" data-onerror="remove">` : ''}
     <div class="foe-col">
     <div class="hud foe">
       <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} ${E ? caughtMark(E.id, { real: true }) : ''}</strong><span>Lv ${E?.lv}</span></div>
@@ -145,16 +145,25 @@ function monSprite(v, back) {
   }
   const [first, ...rest] = urls;
   const chain = JSON.stringify(rest).replace(/"/g, '&quot;');
-  return `<img src="${first[0]}" class="${first[1] ? 'flip' : ''}" alt="${esc(v.name)}" data-fallback="${chain}" onerror="nextSprite(this)">`;
+  return `<img src="${first[0]}" class="${first[1] ? 'flip' : ''}" alt="${esc(v.name)}" data-fallback="${chain}" data-onerror="next">`;
 }
-window.nextSprite = img => {
+const nextSprite = img => {
   const list = JSON.parse(img.dataset.fallback || '[]');
   const next = list.shift();
-  if (!next) { img.onerror = null; return; }
+  if (!next) { delete img.dataset.onerror; return; }
   img.dataset.fallback = JSON.stringify(list);
   img.classList.toggle('flip', !!next[1]);
   img.src = next[0];
 };
+// Broken images: hide, remove or try the next sprite (no inline handlers, so the page can use a strict security policy)
+document.addEventListener('error', e => {
+  const el = e.target;
+  if (el?.tagName !== 'IMG') return;
+  const how = el.dataset.onerror;
+  if (how === 'hide') el.style.visibility = 'hidden';
+  else if (how === 'remove') el.remove();
+  else if (how === 'next') nextSprite(el);
+}, true);
 const WEATHER_LABEL = { sun: '☀️ Harsh sunlight', rain: '🌧️ Rain', sand: '🌪️ Sandstorm', snow: '❄️ Snow' };
 const TERRAIN_LABEL = { electric: '⚡ Electric Terrain', grassy: '🌿 Grassy Terrain', psychic: '🔮 Psychic Terrain', misty: '🌫️ Misty Terrain' };
 function fieldChip(v) {

@@ -10,7 +10,7 @@ import {
 } from './ui.js';
 import { sfx, playMusic } from './audio.js';
 
-const img = (src, cls = '', alt = '') => `<img class="${cls}" src="${src}" alt="${esc(alt)}" loading="lazy" onerror="this.style.visibility='hidden'">`;
+const img = (src, cls = '', alt = '') => `<img class="${cls}" src="${src}" alt="${esc(alt)}" loading="lazy" data-onerror="hide">`;
 
 export function initSocialUI() {
   // ---------- Pokédex ----------

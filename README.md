@@ -127,3 +127,11 @@ Run the tests with `npm test`. Regenerate the game data with `npm run build:data
 ## Disclaimer
 
 PokéSpire is a non-commercial fan project. Pokémon and all related names are trademarks of Nintendo, Creatures Inc. and GAME FREAK inc. This project is not affiliated with or endorsed by them.
+
+## Security and cheating
+
+The game runs in the browser, so a player can always change their own copy. What matters is that cheating doesn't count:
+
+- **Server-checked scores.** The database keeps its own record of each run (start time, difficulty, active play time). Runs can only reach the leaderboard through `finish_run()`, which caps a run at 1,500 points per minute of play (times the difficulty bonus) and 25,000 per run before the bonus. Direct writes to `history` are blocked. See `supabase/anti-cheat.sql`.
+- **Row-level security.** Players can only read and change their own profile, save and friends; `is_admin` can't be changed from the browser.
+- **Locked-down live site.** `npm run build` bundles the game into one minified, obfuscated script with no source files or source maps, so the game state can't be reached from the console. A strict Content Security Policy only allows scripts from the site itself.

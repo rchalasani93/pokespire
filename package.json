@@ -1,15 +1,20 @@
 {
   "name": "pokespire",
   "version": "1.0.0",
-  "description": "A roguelike Pokémon journey: branching routes, Gym Leaders, villain teams, Legendaries, the Elite Four and the Hall of Fame.",
+  "description": "A roguelike Pok\u00e9mon journey: branching routes, Gym Leaders, villain teams, Legendaries, the Elite Four and the Hall of Fame.",
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "test": "node tests/mechanics.test.mjs",
-    "build:data": "node scripts/build-data.mjs"
+    "build:data": "node scripts/build-data.mjs",
+    "build": "node scripts/build-site.mjs",
+    "preview": "node scripts/serve.mjs dist"
   },
   "license": "UNLICENSED",
   "devDependencies": {
-    "@pkmn/dex": "^0.10.11"
+    "@pkmn/dex": "^0.10.11",
+    "@supabase/supabase-js": "^2.118.0",
+    "esbuild": "^0.28.2",
+    "javascript-obfuscator": "^5.9.0"
   },
   "private": true,
   "type": "module",

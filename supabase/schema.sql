@@ -192,3 +192,5 @@ as $$
 $$;
 revoke all on function public.my_friends() from public, anon;
 grant execute on function public.my_friends() to authenticated;
+
+-- Server-checked scores (run timing, score caps, finish_run): see anti-cheat.sql
