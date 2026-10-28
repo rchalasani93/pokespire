@@ -11,7 +11,7 @@ import {
   spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf, runRegion,
 } from './game.js';
 import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl } from './content.js';
-import { startBattle, applyItem } from './battle.js';
+import { startBattle, applyItem, battleView } from './battle.js';
 import { renderBattle, beginBattle, onBattleAction, resumeBattleUI } from './battle-ui.js';
 import { dexEntryHtml } from './social-ui.js';
 import { playMusic, sfx, playCry, applyAudioSettings, unlockAudio } from './audio.js';
@@ -28,11 +28,14 @@ export function go(screen, ui = {}) {
   render();
   window.scrollTo(0, 0);
 }
+const RUN_SCREENS = ['map', 'node', 'battle', 'actDone', 'league', 'hallOfFame'];
 export function render() {
   const fn = SCREENS[S.screen];
   const html = fn ? fn() : '';
+  // Pending run messages only show inside the run (never over the menu); battle messages use the text box
+  const inRun = RUN_SCREENS.includes(S.screen);
   const inlineFlow = S.screen === 'battle' && ['msg', 'learn'].includes(S.run?.flow?.[0]?.type);
-  app().innerHTML = html + (S.modal ? renderModal() : '') + (S.run?.flow?.length && !inlineFlow ? renderFlow() : '');
+  app().innerHTML = html + (S.modal ? renderModal() : '') + (inRun && S.run?.flow?.length && !inlineFlow ? renderFlow() : '');
   document.getElementById('topbar-user').innerHTML = S.user
     ? `<span>${esc(S.user.username)}</span>${S.run && S.screen !== 'menu' ? ` · <span class="money">$${S.run.money.toLocaleString()}</span>` : ''}`
     : '';
@@ -102,8 +105,14 @@ document.addEventListener('input', e => {
   if (el) ACTIONS[el.dataset.input]?.(el.value, el);
 });
 
+let unlockSink = null;
 setProgressHooks({
-  onUnlock: a => { sfx('achievement'); toast(`🏆 Achievement unlocked: ${a.name}`); },
+  onUnlock: a => {
+    sfx('achievement');
+    // At the end of a battle, achievements show in the battle text box
+    if (unlockSink) unlockSink.push(a);
+    else toast(`🏆 Achievement unlocked: ${a.name}`);
+  },
   onChange: () => { persistProfile(); refreshMissionCount(); },
 });
 
@@ -1353,11 +1362,12 @@ registerActions({
 });
 
 // Continuations after a flow finishes (by name so they survive a reload)
+const leaveBattle = () => { S.lastBattle = null; if (S.run) delete S.run.postBattle; };
 const FLOW_THEN = {
-  map: () => { S.lastBattle = null; S.run.node = null; persistRun(); go('map'); },
-  league: () => go('league'),
-  actDone: () => go('actDone'),
-  hallOfFame: () => go('hallOfFame'),
+  map: () => { leaveBattle(); S.run.node = null; persistRun(); go('map'); },
+  league: () => { leaveBattle(); persistRun(); go('league'); },
+  actDone: () => { leaveBattle(); persistRun(); go('actDone'); },
+  hallOfFame: () => { leaveBattle(); persistRun(); go('hallOfFame'); },
   battle: () => resumeBattleUI(),
 };
 
@@ -1389,6 +1399,7 @@ export function finishBattle() {
   }
 
   // Points, missions and achievements
+  unlockSink = [];
   if (result === 'win') battleWon(b.kind, b.enemy);
   if (result === 'caught') {
     caughtEvents(b.caughtMon);
@@ -1445,9 +1456,15 @@ export function finishBattle() {
     if (b.kind === 'e4') { run.league.stage++; then = 'league'; }
     if (b.kind === 'champion') { run.league.stage++; then = 'hallOfFame'; }
   }
+  for (const a of unlockSink) steps.push({ type: 'msg', text: `🏆 Achievement unlocked: ${a.name}!` });
+  unlockSink = null;
   // Messages and move prompts after the battle play in the battle text box
   S.lastBattle = run.battle;
   run.battle = null;
+  if (steps.length) {
+    const lb = S.lastBattle;
+    run.postBattle = { kind: lb.kind, trainer: lb.trainer, enemy: [lb.enemy[lb.ei]], ei: 0, view: battleView({ ...run, battle: lb }) };
+  }
   if (steps.length) queueFlow(steps, then);
   else { S.lastBattle = null; persistRun(); FLOW_THEN[then](); }
 }
@@ -1570,6 +1587,7 @@ export function resumeRun() {
   const run = S.run;
   if (!run) return go('menu');
   if (run.battle) { beginBattle([], true); return; }
+  if (run.flow?.length && run.postBattle) { S.lastBattle = run.postBattle; resumeBattleUI(); return; }
   if (run.pos === 'boss' && !run.league) return go('actDone');
   if (run.league && run.map.nodes[run.pos]?.type === 'boss') {
     if (run.league.stage >= 5) return go('hallOfFame');

@@ -49,7 +49,7 @@ function settle() {
   const b = run.battle;
   B.playing = false;
   B.fx = null;
-  if (!b) return;
+  if (!b) { render(); return; }
   B.view = battleView(run);
   if (b.learnQueue.length) {
     const steps = b.learnQueue.map(x => ({ type: 'learn', uid: x.uid, move: x.move }));
@@ -75,6 +75,7 @@ function settle() {
 /** Called after an in-battle move-learning flow finishes. */
 export function resumeBattleUI() {
   S.screen = 'battle';
+  if (!S.run.battle && S.run.postBattle) B.view = S.run.postBattle.view;
   settle();
 }
 
@@ -83,7 +84,7 @@ function battleScreen() {
   const run = S.run;
   const b = run.battle || S.lastBattle;
   if (!b) return '';
-  const v = B.view || (run.battle ? battleView(run) : { p: null, e: null });
+  const v = B.view || (run.battle ? battleView(run) : run.postBattle?.view || { p: null, e: null });
   const P = v.p, E = v.e;
   const pMon = run.party.find(m => m.uid === P?.uid);
   let expPct = 0;
