@@ -6,7 +6,7 @@ import { playerAction, forceSwitch, battleView } from './battle.js';
 import { ITEMS, trainerSpriteUrl } from './content.js';
 import { playMusic, sfx, playCry } from './audio.js';
 import {
-  go, render, registerActions, esc, hpBar, statusTag, typeBadge, persistRun, queueFlow, finishBattle, SCREENS, caughtMark,
+  go, render, registerActions, esc, hpBar, statusTag, typeBadge, persistRun, queueFlow, finishBattle, SCREENS, caughtMark, learnPrompt,
 } from './ui.js';
 
 const B = { queue: [], view: null, text: '', mode: 'main', playing: false, timer: null, item: null, fx: null, captured: false };
@@ -140,13 +140,7 @@ function inlineFlow(step) {
   const mon = [...S.run.party, ...S.run.box].find(m => m.uid === step.uid);
   const mv = MOVES[step.move];
   if (!mon) return { text: '', controls: '<div class="action-grid"><button data-act="flowNext">Continue</button></div>' };
-  const name = monName(mon);
-  return {
-    text: `${name} wants to learn ${mv.n}, but ${name} already knows four moves. Forget a move to make room for ${mv.n}?`,
-    controls: `<div class="learn-new" style="--tc:${TYPE_COLORS[mv.t]}"><strong>${esc(mv.n)}</strong> <span>${mv.t} · ${mv.c === 'S' ? 'Status' : `Pow ${mv.p}`} · ${mv.pp} PP</span><small>${esc(mv.d || '')}</small></div>
-      <div class="move-grid">${mon.moves.map((x, i) => { const m = MOVES[x.id]; return `<button class="move" style="--tc:${TYPE_COLORS[m.t]}" data-act="forgetMove" data-arg="${i}" title="${esc(m.d || '')}"><strong>Forget ${esc(m.n)}</strong><span>${m.t} · ${x.pp}/${m.pp} PP</span></button>`; }).join('')}</div>
-      <button class="ghost back-btn" data-act="skipLearn">Don't learn ${esc(mv.n)}</button>`,
-  };
+  return learnPrompt(step, mon);
 }
 
 function controls() {

@@ -36,12 +36,26 @@ export function render() {
   const inRun = RUN_SCREENS.includes(S.screen);
   const inlineFlow = S.screen === 'battle' && ['msg', 'learn'].includes(S.run?.flow?.[0]?.type);
   app().innerHTML = html + (S.modal ? renderModal() : '') + (inRun && S.run?.flow?.length && !inlineFlow ? renderFlow() : '');
-  document.getElementById('topbar-user').innerHTML = S.user
-    ? `<span>${esc(S.user.username)}</span>${S.run && S.screen !== 'menu' ? ` · <span class="money">$${S.run.money.toLocaleString()}</span>` : ''}`
-    : '';
+  document.getElementById('topbar-user').innerHTML = S.user ? userMenuHtml() : '';
   renderOnline();
   afterRender();
 }
+
+function userMenuHtml() {
+  const money = S.run && S.screen !== 'menu' ? `<span class="money">$${S.run.money.toLocaleString()}</span>` : '';
+  return `${money}<div class="user-menu">
+    <button class="user-btn silent" data-act="toggleUserMenu" aria-haspopup="menu" aria-expanded="${!!S.userMenu}">
+      <span class="avatar">${esc(S.user.username[0] || '?').toUpperCase()}</span><span class="uname">${esc(S.user.username)}</span><span class="caret">▾</span></button>
+    ${S.userMenu ? `<div class="user-dropdown" role="menu">
+      <button role="menuitem" data-act="menuSettings">Settings<small>Sound and text speed</small></button>
+      ${S.user.isAdmin ? '<button role="menuitem" class="admin-btn" data-act="menuAdmin">Admin panel<small>God mode and debug tools</small></button>' : ''}
+      <button role="menuitem" data-act="menuLogout">Log out</button>
+    </div>` : ''}
+  </div>`;
+}
+document.addEventListener('click', e => {
+  if (S.userMenu && !e.target.closest('.user-menu')) { S.userMenu = false; render(); }
+}, true);
 
 export function renderOnline() {
   let el = document.getElementById('online-count');
@@ -282,10 +296,7 @@ SCREENS.menu = () => {
         <button data-act="openLeaderboard">Leaderboard<small>Top scores</small></button>
         <button data-act="openFriends">Friends<small>Find and add players</small></button>
         <button data-act="openHistory">History<small>Runs and Hall of Fame</small></button>
-        <button data-act="openSettings">Settings<small>Sound and text speed</small></button>
       </div>
-      ${S.user.isAdmin ? '<button class="big admin-btn" data-act="openAdmin">Admin panel<small>God mode and debug tools</small></button>' : ''}
-      <button class="ghost" data-act="logout">Log out</button>
     </div>
     <div class="stat-row four">
       <div><b>${S.profile.stats.runs}</b><span>Runs</span></div>
@@ -307,7 +318,21 @@ registerActions({
   },
   abandonAndPlay: async () => { S.modal = null; await endRun('Abandoned'); go('mode'); },
   continueRun: () => resumeRun(),
-  openSettings: () => go('settings'),
+  openSettings: () => {
+    if (S.screen !== 'settings') { S.settingsFrom = S.screen; S.settingsUi = S.ui; }
+    go('settings');
+  },
+  toggleUserMenu: () => { S.userMenu = !S.userMenu; render(); },
+  menuSettings: () => { S.userMenu = false; ACTIONS.openSettings(); },
+  menuAdmin: () => { S.userMenu = false; ACTIONS.openAdmin(); },
+  menuLogout: () => { S.userMenu = false; ACTIONS.logout(); },
+  settingsDone: () => {
+    const from = S.settingsFrom;
+    S.settingsFrom = null;
+    if (from === 'battle') resumeBattleUI();
+    else if (from && from !== 'auth' && SCREENS[from]) go(from, S.settingsUi || {});
+    else go('menu');
+  },
   openHistory: async () => {
     go('history', { tab: 'runs', loading: true });
     try { S.history = (await api.history()).history; } catch { S.history = []; }
@@ -339,7 +364,7 @@ SCREENS.settings = () => {
     <label>Text speed
       <select data-input="setTextSpeed">${['slow', 'normal', 'fast'].map(v => `<option ${s.textSpeed === v ? 'selected' : ''} value="${v}">${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}</select>
     </label>
-    <div class="row gap"><button data-act="testSound">Test sound</button><button class="primary" data-act="back">Done</button></div>
+    <div class="row gap"><button data-act="testSound">Test sound</button><button class="primary" data-act="settingsDone">Done</button></div>
   </section>`;
 };
 registerActions({
@@ -659,7 +684,6 @@ function sidePanel() {
     <div class="badges">${run.badges.length ? run.badges.map(b => `<span class="badge" title="${esc(b.leader)}">${esc(b.name)}</span>`).join('') : '<span class="muted small">Defeat Gym Leaders to earn badges.</span>'}</div>
     <p class="muted small">Battles won: ${run.stats.wins} · Caught: ${run.stats.caught}</p>
     ${run.fallen?.length ? `<p class="muted small">Fallen: ${run.fallen.map(f => esc(f.name)).join(', ')}</p>` : ''}
-    ${S.user.isAdmin ? '<div class="row gap wrap"><button class="admin-btn" data-act="openAdmin">Admin panel</button></div>' : ''}
     <div class="row gap wrap"><button class="ghost" data-act="toMenu">Save & quit</button><button class="ghost danger" data-act="abandonRun">Abandon run</button></div>
   </aside>`;
 }
@@ -1271,6 +1295,43 @@ export function queueFlow(steps, then = null) {
 
 function findMon(uid) { return S.run.party.find(m => m.uid === uid) || S.run.box.find(m => m.uid === uid); }
 
+function learnOption(id, i, { pp, isNew, sel }) {
+  const mv = MOVES[id];
+  return `<button class="learn-opt ${sel ? 'sel' : ''} ${isNew ? 'is-new' : ''}" style="--tc:${TYPE_COLORS[mv.t]}" data-act="learnPick" data-arg="${i}" aria-pressed="${sel}">
+    <span class="row"><strong>${esc(mv.n)}${isNew ? ' <span class="new-tag">NEW</span>' : ''}</strong><span class="small">${pp != null ? pp : mv.pp}/${mv.pp} PP</span></span>
+    <span class="row small"><span>${typeBadge(mv.t)} ${CAT[mv.c] || 'Special'}</span><span>Pow ${mv.p || '—'} · Acc ${mv.a || '—'}</span></span>
+  </button>`;
+}
+
+/** Move learning when the moveset is full, worded and paced like the main games. */
+export function learnPrompt(step, mon) {
+  const name = monName(mon), mv = MOVES[step.move];
+  if (step.stage === 'stop') {
+    return {
+      text: `Stop trying to teach ${mv.n}?`,
+      controls: `<div class="action-grid"><button data-act="learnStopYes">Yes</button><button class="primary" data-act="learnStopNo">No</button></div>`,
+    };
+  }
+  if (step.stage === 'pick') {
+    const sel = step.sel ?? null;
+    const opts = [...mon.moves.map((x, i) => learnOption(x.id, i, { pp: x.pp, sel: sel === i })), learnOption(step.move, 4, { isNew: true, sel: sel === 4 })];
+    const picked = sel == null ? null : sel === 4 ? mv : MOVES[mon.moves[sel].id];
+    const confirm = sel == null ? '<button class="primary" disabled>Pick a move</button>'
+      : sel === 4 ? `<button class="primary" data-act="learnConfirm">Give up on ${esc(mv.n)}</button>`
+      : `<button class="primary" data-act="learnConfirm">Replace ${esc(picked.n)} with ${esc(mv.n)}</button>`;
+    return {
+      text: picked ? `${picked.n}: ${picked.d || ''}` : `Which move should ${name} forget to learn ${mv.n}?`,
+      controls: `<div class="learn-list">${opts.join('')}</div>
+        <div class="learn-actions"><button class="ghost" data-act="learnBack">Back</button>${confirm}</div>`,
+    };
+  }
+  return {
+    text: `${name} wants to learn the move ${mv.n}. But ${name} can't learn more than four moves. Delete a move to make room for ${mv.n}?`,
+    controls: `<div class="learn-list">${learnOption(step.move, 4, { isNew: true, sel: false }).replace('data-act="learnPick"', 'data-act="learnInfo"')}</div>
+      <div class="action-grid"><button class="primary" data-act="learnYes">Yes</button><button data-act="learnNo">No</button></div>`,
+  };
+}
+
 function renderFlow() {
   const step = S.run.flow[0];
   const mon = step.uid ? findMon(step.uid) : null;
@@ -1278,11 +1339,8 @@ function renderFlow() {
   if (step.type === 'msg') {
     body = `<p class="big-text">${esc(step.text)}</p><button class="primary" data-act="flowNext">OK</button>`;
   } else if (step.type === 'learn' && mon) {
-    body = `<h2>${esc(monName(mon))} wants to learn ${esc(MOVES[step.move].n)}</h2>
-      <p class="muted">But ${esc(monName(mon))} already knows four moves. Choose a move to forget.</p>
-      ${moveRow(step.move)}
-      <div class="forget-grid">${mon.moves.map((x, i) => `<button data-act="forgetMove" data-arg="${i}">${esc(MOVES[x.id].n)}<small>${MOVES[x.id].t} · ${x.pp}/${MOVES[x.id].pp} PP</small></button>`).join('')}</div>
-      <button class="ghost" data-act="skipLearn">Don't learn ${esc(MOVES[step.move].n)}</button>`;
+    const lp = learnPrompt(step, mon);
+    body = `<p class="big-text">${esc(lp.text)}</p>${lp.controls}`;
   } else if (step.type === 'evolve' && mon) {
     const done = step.done;
     body = `<div class="center-text evolution ${done ? 'done' : ''}">
@@ -1326,6 +1384,18 @@ registerActions({
     S.run.flow.splice(1, 0, { type: 'msg', text: `1, 2, and… Poof! ${monName(mon)} forgot ${old} and learned ${MOVES[step.move].n}!` });
     sfx('learn');
     flowAdvance();
+  },
+  learnYes: () => { S.run.flow[0].stage = 'pick'; S.run.flow[0].sel = null; render(); },
+  learnNo: () => { S.run.flow[0].stage = 'stop'; render(); },
+  learnStopYes: () => ACTIONS.skipLearn(),
+  learnStopNo: () => { S.run.flow[0].stage = null; render(); },
+  learnBack: () => { S.run.flow[0].stage = null; S.run.flow[0].sel = null; render(); },
+  learnInfo: () => {},
+  learnPick: i => { S.run.flow[0].sel = +i; render(); },
+  learnConfirm: () => {
+    const sel = S.run.flow[0].sel;
+    if (sel == null) return;
+    if (sel === 4) ACTIONS.skipLearn(); else ACTIONS.forgetMove(sel);
   },
   skipLearn: () => {
     const step = S.run.flow[0];

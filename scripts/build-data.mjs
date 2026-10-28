@@ -3,6 +3,7 @@
 // Usage: node scripts/build-data.mjs   (needs network for the PokeAPI CSVs)
 import { Dex } from '@pkmn/dex';
 import { writeFileSync, mkdirSync } from 'node:fs';
+import { orderLearnsets } from './learnset-order.mjs';
 
 const CSV = 'https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv/';
 async function csv(name) {
@@ -120,6 +121,8 @@ for (const id of usedMoves) {
 
 // Strip moves we never kept from learnsets
 for (const k of Object.keys(learnsets)) learnsets[k] = learnsets[k].filter(([, m]) => moves[m]);
+// Same-level moves in mainline order
+await orderLearnsets(learnsets);
 
 const typeChart = {};
 for (const atk of Dex.types.all()) {
