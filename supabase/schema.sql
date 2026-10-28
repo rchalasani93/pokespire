@@ -120,23 +120,8 @@ drop trigger if exists on_history_score on public.history;
 create trigger on_history_score after insert on public.history
   for each row execute function public.apply_run_score();
 
--- Mission and achievement rewards (bounded per claim)
-create or replace function public.claim_points(amount integer)
-returns bigint
-language plpgsql
-security definer set search_path = ''
-as $$
-declare result bigint;
-begin
-  if auth.uid() is null then raise exception 'Sign in required'; end if;
-  if amount < 1 or amount > 5000 then raise exception 'Invalid amount'; end if;
-  update public.profiles set total_score = total_score + amount
-   where user_id = auth.uid() returning total_score into result;
-  return result;
-end;
-$$;
-revoke all on function public.claim_points(integer) from public, anon;
-grant execute on function public.claim_points(integer) to authenticated;
+-- Leaderboard points come only from runs (missions and achievements give none)
+drop function if exists public.claim_points(integer);
 
 -- Public leaderboard (usernames and scores only)
 create or replace function public.leaderboard(kind text default 'best', lim integer default 50)

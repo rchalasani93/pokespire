@@ -17,7 +17,7 @@ import { startBattle, applyItem, battleView, megaFormFor } from './battle.js';
 import { renderBattle, beginBattle, onBattleAction, resumeBattleUI } from './battle-ui.js';
 import { dexEntryHtml } from './social-ui.js';
 import { playMusic, sfx, playCry, applyAudioSettings, unlockAudio } from './audio.js';
-import { track, addRunPoints, battleWon, caughtEvents, checkAchievements, setProgressHooks, POINTS } from './progress.js';
+import { track, addRunPoints, battleWon, caughtEvents, checkAchievements, setProgressHooks, POINTS, completeAllAchievements } from './progress.js';
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const app = () => document.getElementById('app');
@@ -77,7 +77,7 @@ export function renderOnline() {
 export function refreshMissionCount() {
   import('./progress.js').then(({ missionList }) => {
     const { daily, weekly } = missionList();
-    S.missionsReady = [...daily, ...weekly].filter(m => m.done && !m.claimed).length;
+    S.missionsReady = 0; // missions have nothing to claim any more
   });
 }
 function afterRender() {
@@ -1362,6 +1362,8 @@ function adminHtml() {
     <label class="check"><input type="checkbox" class="silent" data-act="adminAllStarters" ${S.profile.settings.allStarters ? 'checked' : ''}> Every Pokémon is available as a starter</label>
     <label class="check"><input type="checkbox" class="silent" data-act="adminAllShinies" ${S.profile.settings.allShinies ? 'checked' : ''}> Every shiny is unlocked (Pokédex and shiny starters)</label>
     <p class="muted small">These two unlocks only change what you can view and pick. They don't add real catches, so they never unlock achievements.</p>
+    <div class="row gap"><button data-act="adminAchievements">Mark all achievements complete</button></div>
+    <p class="muted small">Achievements give no points, so this doesn't change the leaderboard.</p>
     <div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`;
 }
 
@@ -1383,6 +1385,12 @@ registerActions({
     if (el.checked) S.run.godUsed = true;
     toast(el.checked ? 'God mode on' : 'God mode off');
     persistRun(); render();
+  }),
+  adminAchievements: adminOnly(() => {
+    const n = completeAllAchievements();
+    persistProfile();
+    sfx('achievement'); toast(n ? `Marked ${n} achievements complete` : 'All achievements were already complete');
+    render();
   }),
   adminGimmicks: adminOnly(() => {
     S.run.godUsed = true;

@@ -114,11 +114,6 @@ Object.assign(api, {
     const { error } = await sb.from('friends').delete().eq('user_id', id).eq('friend_id', friendId);
     fail(error);
   },
-  async claimPoints(amount) {
-    const { data, error } = await sb.rpc('claim_points', { amount: Math.round(amount) });
-    fail(error);
-    return data;
-  },
   async scores() {
     const id = await currentUserId();
     const { data, error } = await sb.from('profiles').select('best_score, total_score').eq('user_id', id).maybeSingle();

@@ -1,10 +1,8 @@
 // Points, daily/weekly missions and achievements.
 // Points: every win and catch adds to the run's score (scaled by difficulty). Finished runs go to the
-// leaderboard. Missions and achievements add bonus points to the player's lifetime total.
+// leaderboard; a player's total is the sum of their runs. Missions and achievements don't give points.
 import { S } from './state.js';
 import { DEX, regionOf } from './data.js';
-// api.js is loaded lazily so this module stays testable outside the browser
-const claimPoints = async n => (await import('./api.js')).api.claimPoints(n);
 import { diffOf } from './content.js';
 
 // Hooks set by the UI: achievement toasts and saving the profile
@@ -70,35 +68,35 @@ export function weekKey(d = new Date()) {
 const TYPES_FOR_MISSIONS = ['Fire', 'Water', 'Grass', 'Electric', 'Bug', 'Psychic', 'Rock', 'Ghost', 'Dragon', 'Fairy', 'Steel', 'Ice', 'Fighting', 'Poison', 'Ground', 'Flying', 'Dark', 'Normal'];
 
 const DAILY_POOL = [
-  { id: 'catch3', text: 'Catch 3 Pokémon', ev: 'catch', target: 3, pts: 150 },
-  { id: 'trainer5', text: 'Win 5 Trainer battles', ev: 'win:trainer', target: 5, pts: 200 },
-  { id: 'gym1', text: 'Defeat a Gym Leader', ev: 'win:gym', target: 1, pts: 250 },
-  { id: 'villain2', text: 'Beat 2 villain team battles', ev: 'win:villain', target: 2, pts: 200 },
-  { id: 'evolve1', text: 'Evolve a Pokémon', ev: 'evolve', target: 1, pts: 150 },
-  { id: 'money500', text: 'Earn $500 in prize money', ev: 'money', target: 500, pts: 150 },
-  { id: 'tutor2', text: 'Teach 2 moves at a Move Tutor', ev: 'tutor', target: 2, pts: 100 },
-  { id: 'wins10', text: 'Win 10 battles', ev: 'win', target: 10, pts: 200 },
-  { id: 'elite1', text: 'Defeat or catch an Elite Pokémon', ev: 'win:elite', target: 1, pts: 200 },
-  { id: 'act1', text: 'Clear an act', ev: 'actClear', target: 1, pts: 250 },
+  { id: 'catch3', text: 'Catch 3 Pokémon', ev: 'catch', target: 3 },
+  { id: 'trainer5', text: 'Win 5 Trainer battles', ev: 'win:trainer', target: 5 },
+  { id: 'gym1', text: 'Defeat a Gym Leader', ev: 'win:gym', target: 1 },
+  { id: 'villain2', text: 'Beat 2 villain team battles', ev: 'win:villain', target: 2 },
+  { id: 'evolve1', text: 'Evolve a Pokémon', ev: 'evolve', target: 1 },
+  { id: 'money500', text: 'Earn $500 in prize money', ev: 'money', target: 500 },
+  { id: 'tutor2', text: 'Teach 2 moves at a Move Tutor', ev: 'tutor', target: 2 },
+  { id: 'wins10', text: 'Win 10 battles', ev: 'win', target: 10 },
+  { id: 'elite1', text: 'Defeat or catch an Elite Pokémon', ev: 'win:elite', target: 1 },
+  { id: 'act1', text: 'Clear an act', ev: 'actClear', target: 1 },
 ];
 const WEEKLY_POOL = [
-  { id: 'catch25', text: 'Catch 25 Pokémon', ev: 'catch', target: 25, pts: 800 },
-  { id: 'gym6', text: 'Defeat 6 Gym Leaders', ev: 'win:gym', target: 6, pts: 1000 },
-  { id: 'hof1', text: 'Enter the Hall of Fame', ev: 'hallOfFame', target: 1, pts: 1500 },
-  { id: 'legend1', text: 'Catch a Legendary Pokémon', ev: 'catchLegendary', target: 1, pts: 1000 },
-  { id: 'evolve10', text: 'Evolve 10 Pokémon', ev: 'evolve', target: 10, pts: 700 },
-  { id: 'wins60', text: 'Win 60 battles', ev: 'win', target: 60, pts: 900 },
-  { id: 'boss2', text: 'Beat 2 villain team bosses', ev: 'win:villainBoss', target: 2, pts: 900 },
-  { id: 'e4x4', text: 'Beat 4 Elite Four members', ev: 'win:e4', target: 4, pts: 1200 },
-  { id: 'money5k', text: 'Earn $5,000 in prize money', ev: 'money', target: 5000, pts: 800 },
-  { id: 'acts5', text: 'Clear 5 acts', ev: 'actClear', target: 5, pts: 1000 },
-  { id: 'shiny1', text: 'Catch a shiny Pokémon', ev: 'shiny', target: 1, pts: 1500 },
+  { id: 'catch25', text: 'Catch 25 Pokémon', ev: 'catch', target: 25 },
+  { id: 'gym6', text: 'Defeat 6 Gym Leaders', ev: 'win:gym', target: 6 },
+  { id: 'hof1', text: 'Enter the Hall of Fame', ev: 'hallOfFame', target: 1 },
+  { id: 'legend1', text: 'Catch a Legendary Pokémon', ev: 'catchLegendary', target: 1 },
+  { id: 'evolve10', text: 'Evolve 10 Pokémon', ev: 'evolve', target: 10 },
+  { id: 'wins60', text: 'Win 60 battles', ev: 'win', target: 60 },
+  { id: 'boss2', text: 'Beat 2 villain team bosses', ev: 'win:villainBoss', target: 2 },
+  { id: 'e4x4', text: 'Beat 4 Elite Four members', ev: 'win:e4', target: 4 },
+  { id: 'money5k', text: 'Earn $5,000 in prize money', ev: 'money', target: 5000 },
+  { id: 'acts5', text: 'Clear 5 acts', ev: 'actClear', target: 5 },
+  { id: 'shiny1', text: 'Catch a shiny Pokémon', ev: 'shiny', target: 1 },
 ];
 
 export function currentMissions() {
   const d = dayKey(), w = weekKey();
   const type = pickN(TYPES_FOR_MISSIONS, 1, 'type' + d)[0];
-  const daily = [...pickN(DAILY_POOL, 2, 'daily' + d), { id: 'type' + type, text: `Catch a ${type}-type Pokémon`, ev: 'catchType:' + type, target: 1, pts: 150 }];
+  const daily = [...pickN(DAILY_POOL, 2, 'daily' + d), { id: 'type' + type, text: `Catch a ${type}-type Pokémon`, ev: 'catchType:' + type, target: 1 }];
   const weekly = pickN(WEEKLY_POOL, 3, 'weekly' + w);
   return { daily, weekly, dayKey: d, weekKey: w };
 }
@@ -115,62 +113,54 @@ function missionState() {
 export function missionList() {
   const st = missionState();
   const { daily, weekly } = currentMissions();
-  const view = (m, s) => ({ ...m, progress: Math.min(m.target, s.progress[m.ev] || 0), done: (s.progress[m.ev] || 0) >= m.target, claimed: s.claimed.includes(m.id) });
+  const view = (m, s) => ({ ...m, progress: Math.min(m.target, s.progress[m.ev] || 0), done: (s.progress[m.ev] || 0) >= m.target });
   return { daily: daily.map(m => view(m, st.daily)), weekly: weekly.map(m => view(m, st.weekly)) };
 }
 
-export async function claimMission(period, id) {
-  const st = missionState()[period];
-  const m = missionList()[period].find(x => x.id === id);
-  if (!m || !m.done || m.claimed) return 0;
-  st.claimed.push(id);
-  await claimPoints(m.pts);
-  return m.pts;
-}
 
 // ---------- Achievements ----------
 const c = ev => S.profile.counters?.[ev] || 0;
 const realDex = () => new Set(S.profile.caught).size;
 const realShinies = () => new Set(S.profile.shinies || []);
 export const ACHIEVEMENTS = [
-  { id: 'first_catch', name: 'First Catch', desc: 'Catch your first Pokémon', pts: 50, test: () => c('catch') >= 1 },
-  { id: 'catch_100', name: 'Poké Ball Pro', desc: 'Catch 100 Pokémon', pts: 300, test: () => c('catch') >= 100 },
-  { id: 'dex_50', name: 'Pokédex Rookie', desc: 'Catch 50 different species', pts: 150, test: () => realDex() >= 50 },
-  { id: 'dex_250', name: 'Pokédex Ace', desc: 'Catch 250 different species', pts: 500, test: () => realDex() >= 250 },
-  { id: 'dex_500', name: 'Pokédex Master', desc: 'Catch 500 different species', pts: 1000, test: () => realDex() >= 500 },
-  { id: 'dex_all', name: "Gotta Catch 'Em All", desc: 'Catch all 1,025 species', pts: 5000, test: () => realDex() >= 1025 },
-  { id: 'gim_mega', name: 'Mega Evolution', desc: 'Mega Evolve a Pokémon in battle', pts: 200, test: () => c('gimmick:mega') >= 1 },
-  { id: 'gim_z', name: 'Full-Force Z-Power', desc: 'Unleash a Z-Move', pts: 200, test: () => c('gimmick:z') >= 1 },
-  { id: 'gim_dmax', name: 'Max Power', desc: 'Dynamax or Gigantamax a Pokémon', pts: 200, test: () => c('gimmick:dmax') >= 1 },
-  { id: 'gim_tera', name: 'Crystal Clear', desc: 'Terastallize a Pokémon', pts: 200, test: () => c('gimmick:tera') >= 1 },
-  { id: 'gim_all', name: 'Gimmick Master', desc: 'Use all four battle gimmicks', pts: 1000, test: () => ['mega', 'z', 'dmax', 'tera'].every(g => c('gimmick:' + g) >= 1) },
-  { id: 'shiny_1', name: 'Something Sparkly', desc: 'Catch a shiny Pokémon', pts: 300, test: () => c('shiny') >= 1 },
-  { id: 'shiny_5', name: 'Glimmering', desc: 'Catch 5 shiny Pokémon', pts: 600, test: () => c('shiny') >= 5 },
-  { id: 'shiny_10', name: 'Shiny Hunter', desc: 'Catch 10 shiny Pokémon', pts: 1500, test: () => c('shiny') >= 10 },
-  { id: 'shiny_25', name: 'Shining Collector', desc: 'Catch 25 shiny Pokémon', pts: 3000, test: () => c('shiny') >= 25 },
-  { id: 'shiny_dex_50', name: 'Shiny Dex', desc: 'Catch 50 different shiny species', pts: 5000, test: () => realShinies().size >= 50 },
-  { id: 'shiny_legend', name: 'Golden Legend', desc: 'Catch a shiny Legendary or Mythical Pokémon', pts: 2000, test: () => c('shinyLegendary') >= 1 },
-  { id: 'shiny_start', name: 'Sparkling Partner', desc: 'Start a run with a shiny starter', pts: 300, test: () => c('shinyStart') >= 1 },
-  { id: 'shiny_team', name: 'Dazzling Team', desc: 'Have six shiny Pokémon on your team', pts: 1500, test: () => (S.run?.party || []).filter(m => m.shiny).length >= 6 },
-  { id: 'shiny_hof', name: 'Shiny Champion', desc: 'Enter the Hall of Fame with a shiny on your team', pts: 1500, test: () => c('hallOfFame:shiny') >= 1 },
-  { id: 'shiny_types', name: 'Rainbow Shine', desc: 'Catch shinies of 9 different types', pts: 1500, test: () => new Set([...realShinies()].flatMap(id => DEX[id]?.t || [])).size >= 9 },
-  { id: 'shiny_regions', name: 'Shiny World Tour', desc: 'Catch a shiny from every region', pts: 4000, test: () => new Set([...realShinies()].map(regionOf)).size >= 9 },
-  { id: 'legend_1', name: 'Legendary Encounter', desc: 'Catch a Legendary Pokémon', pts: 300, test: () => c('catchLegendary') >= 1 },
-  { id: 'legend_10', name: 'Myth Collector', desc: 'Catch 10 Legendary Pokémon', pts: 1500, test: () => c('catchLegendary') >= 10 },
-  { id: 'badge_1', name: 'First Badge', desc: 'Defeat a Gym Leader', pts: 100, test: () => c('win:gym') >= 1 },
-  { id: 'badges_8', name: 'Badge Case Full', desc: 'Earn 8 badges in one run', pts: 800, test: () => (S.run?.badges.length || 0) >= 8 },
-  { id: 'boss_3', name: 'Villain Buster', desc: 'Beat 3 villain team bosses', pts: 400, test: () => c('win:villainBoss') >= 3 },
-  { id: 'elite_10', name: 'Elite Tamer', desc: 'Defeat or catch 10 Elite Pokémon', pts: 400, test: () => c('win:elite') >= 10 },
-  { id: 'evolve_25', name: 'Evolutionary', desc: 'Evolve 25 Pokémon', pts: 400, test: () => c('evolve') >= 25 },
-  { id: 'level_100', name: 'Max Level', desc: 'Raise a Pokémon to Lv 100', pts: 500, test: () => c('level100') >= 1 },
-  { id: 'perfect_ivs', name: 'Perfect Specimen', desc: 'Own a Pokémon with six perfect IVs', pts: 300, test: () => (S.run?.party || []).some(m => m.iv.every(v => v === 31)) },
-  { id: 'max_evs', name: 'Fully Trained', desc: 'Give a Pokémon all 510 EVs', pts: 300, test: () => (S.run?.party || []).some(m => m.ev.reduce((a, b) => a + b, 0) >= 510) },
-  { id: 'rich', name: 'Big Money', desc: 'Hold $10,000 at once', pts: 200, test: () => (S.run?.money || 0) >= 10000 },
-  { id: 'runs_10', name: 'Dedicated Trainer', desc: 'Start 10 runs', pts: 200, test: () => c('runStart') >= 10 },
-  { id: 'champion', name: 'Champion', desc: 'Enter the Hall of Fame', pts: 1000, test: () => c('hallOfFame') >= 1 },
-  { id: 'champion_hard', name: 'Hard-Won Victory', desc: 'Enter the Hall of Fame on Hard', pts: 1500, test: () => c('hallOfFame:hard') >= 1 },
-  { id: 'champion_hell', name: 'Nuzlocke Legend', desc: 'Enter the Hall of Fame on Hell', pts: 3000, test: () => c('hallOfFame:hell') >= 1 },
-  { id: 'world_tour', name: 'World Tour', desc: 'Win Classic mode in all 9 regions', pts: 5000, test: () => (S.profile.classicWins || []).length >= 9 },
+  { id: 'first_catch', name: 'First Catch', desc: 'Catch your first Pokémon', test: () => c('catch') >= 1 },
+  { id: 'catch_100', name: 'Poké Ball Pro', desc: 'Catch 100 Pokémon', test: () => c('catch') >= 100 },
+  { id: 'dex_50', name: 'Pokédex Rookie', desc: 'Catch 50 different species', test: () => realDex() >= 50 },
+  { id: 'dex_250', name: 'Pokédex Ace', desc: 'Catch 250 different species', test: () => realDex() >= 250 },
+  { id: 'dex_500', name: 'Pokédex Master', desc: 'Catch 500 different species', test: () => realDex() >= 500 },
+  { id: 'dex_all', name: "Gotta Catch 'Em All", desc: 'Catch all 1,025 species', test: () => realDex() >= 1025 },
+  { id: 'gim_mega', name: 'Mega Evolution', desc: 'Mega Evolve a Pokémon in battle', test: () => c('gimmick:mega') >= 1 },
+  { id: 'gim_z', name: 'Full-Force Z-Power', desc: 'Unleash a Z-Move', test: () => c('gimmick:z') >= 1 },
+  { id: 'gim_dmax', name: 'Max Power', desc: 'Dynamax or Gigantamax a Pokémon', test: () => c('gimmick:dmax') >= 1 },
+  { id: 'gim_tera', name: 'Crystal Clear', desc: 'Terastallize a Pokémon', test: () => c('gimmick:tera') >= 1 },
+  { id: 'gim_all', name: 'Gimmick Master', desc: 'Use all four battle gimmicks', test: () => ['mega', 'z', 'dmax', 'tera'].every(g => c('gimmick:' + g) >= 1) },
+  { id: 'shiny_1', name: 'Something Sparkly', desc: 'Catch a shiny Pokémon', test: () => c('shiny') >= 1 },
+  { id: 'shiny_5', name: 'Glimmering', desc: 'Catch 5 shiny Pokémon', test: () => c('shiny') >= 5 },
+  { id: 'shiny_10', name: 'Shiny Hunter', desc: 'Catch 10 shiny Pokémon', test: () => c('shiny') >= 10 },
+  { id: 'shiny_25', name: 'Shining Collector', desc: 'Catch 25 shiny Pokémon', test: () => c('shiny') >= 25 },
+  { id: 'shiny_dex_50', name: 'Shiny Dex', desc: 'Catch 50 different shiny species', test: () => realShinies().size >= 50 },
+  { id: 'shiny_legend', name: 'Golden Legend', desc: 'Catch a shiny Legendary or Mythical Pokémon', test: () => c('shinyLegendary') >= 1 },
+  { id: 'shiny_start', name: 'Sparkling Partner', desc: 'Start a run with a shiny starter', test: () => c('shinyStart') >= 1 },
+  { id: 'shiny_team', name: 'Dazzling Team', desc: 'Have six shiny Pokémon on your team', test: () => (S.run?.party || []).filter(m => m.shiny).length >= 6 },
+  { id: 'shiny_hof', name: 'Shiny Champion', desc: 'Enter the Hall of Fame with a shiny on your team', test: () => c('hallOfFame:shiny') >= 1 },
+  { id: 'shiny_types', name: 'Rainbow Shine', desc: 'Catch shinies of 9 different types', test: () => new Set([...realShinies()].flatMap(id => DEX[id]?.t || [])).size >= 9 },
+  { id: 'shiny_regions', name: 'Shiny World Tour', desc: 'Catch a shiny from every region', test: () => new Set([...realShinies()].map(regionOf)).size >= 9 },
+  { id: 'legend_1', name: 'Legendary Encounter', desc: 'Catch a Legendary Pokémon', test: () => c('catchLegendary') >= 1 },
+  { id: 'legend_10', name: 'Myth Collector', desc: 'Catch 10 Legendary Pokémon', test: () => c('catchLegendary') >= 10 },
+  { id: 'badge_1', name: 'First Badge', desc: 'Defeat a Gym Leader', test: () => c('win:gym') >= 1 },
+  { id: 'badges_8', name: 'Badge Case Full', desc: 'Earn 8 badges in one run', test: () => (S.run?.badges.length || 0) >= 8 },
+  { id: 'boss_3', name: 'Villain Buster', desc: 'Beat 3 villain team bosses', test: () => c('win:villainBoss') >= 3 },
+  { id: 'elite_10', name: 'Elite Tamer', desc: 'Defeat or catch 10 Elite Pokémon', test: () => c('win:elite') >= 10 },
+  { id: 'evolve_25', name: 'Evolutionary', desc: 'Evolve 25 Pokémon', test: () => c('evolve') >= 25 },
+  { id: 'level_100', name: 'Max Level', desc: 'Raise a Pokémon to Lv 100', test: () => c('level100') >= 1 },
+  { id: 'perfect_ivs', name: 'Perfect Specimen', desc: 'Own a Pokémon with six perfect IVs', test: () => (S.run?.party || []).some(m => m.iv.every(v => v === 31)) },
+  { id: 'max_evs', name: 'Fully Trained', desc: 'Give a Pokémon all 510 EVs', test: () => (S.run?.party || []).some(m => m.ev.reduce((a, b) => a + b, 0) >= 510) },
+  { id: 'rich', name: 'Big Money', desc: 'Hold $10,000 at once', test: () => (S.run?.money || 0) >= 10000 },
+  { id: 'runs_10', name: 'Dedicated Trainer', desc: 'Start 10 runs', test: () => c('runStart') >= 10 },
+  { id: 'champion', name: 'Champion', desc: 'Enter the Hall of Fame', test: () => c('hallOfFame') >= 1 },
+  { id: 'champion_hard', name: 'Hard-Won Victory', desc: 'Enter the Hall of Fame on Hard', test: () => c('hallOfFame:hard') >= 1 },
+  { id: 'champion_hell', name: 'Nuzlocke Legend', desc: 'Enter the Hall of Fame on Hell', test: () => c('hallOfFame:hell') >= 1 },
+  { id: 'world_tour', name: 'World Tour', desc: 'Win Classic mode in all 9 regions', test: () => (S.profile.classicWins || []).length >= 9 },
 ];
 
 /** Record a game event: advances missions, lifetime counters, and checks achievements. Ignored in God mode. */
@@ -200,7 +190,6 @@ export function checkAchievements() {
     if (!ok) continue;
     p.achievements[a.id] = new Date().toISOString();
     unlocked.push(a);
-    claimPoints(a.pts).catch(() => {});
     hooks.onUnlock(a);
   }
   if (unlocked.length) hooks.onChange();
@@ -227,3 +216,14 @@ export function caughtEvents(mon) {
 }
 
 export const pointMultText = run => `×${DIFF_POINT_MULT[run?.difficulty] ?? 1} for ${diffOf(run).name}`;
+
+/** Admin: mark every achievement complete (gives no points, like all achievements). */
+export function completeAllAchievements() {
+  if (!S.profile) return 0;
+  S.profile.achievements ||= {};
+  const now = new Date().toISOString();
+  let n = 0;
+  for (const a of ACHIEVEMENTS) if (!S.profile.achievements[a.id]) { S.profile.achievements[a.id] = now; n++; }
+  hooks.onChange();
+  return n;
+}

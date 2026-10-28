@@ -3,7 +3,7 @@ import { S } from './state.js';
 import { api } from './api.js';
 import { DEX, MOVES, REGIONS, regionOf, familyRoot, bst, spriteUrl, artUrl } from './data.js';
 import { natureLabel, STAT_SHORT } from './mechanics.js';
-import { ACHIEVEMENTS, missionList, claimMission, POINT_RULES, DIFF_POINT_MULT } from './progress.js';
+import { ACHIEVEMENTS, missionList, POINT_RULES, DIFF_POINT_MULT } from './progress.js';
 import {
   SCREENS, registerActions, go, render, esc, typeBadge, toast, persistProfile, pokedexCount, refreshMissionCount,
   filterBar, filterState, sortSpecies, abilityInfo, unlockedFor, evolutionChain, learnsetTable, caughtState, caughtMark, adminAllShinies,
@@ -56,11 +56,10 @@ export function initSocialUI() {
     const tab = S.ui.tab || 'missions';
     const unlocked = S.profile.achievements || {};
     const doneCount = ACHIEVEMENTS.filter(a => unlocked[a.id]).length;
-    const row = (m, period) => `<div class="mission ${m.claimed ? 'claimed' : m.done ? 'done' : ''}">
-      <div class="row"><strong>${esc(m.text)}</strong><span class="pts">+${m.pts.toLocaleString()} pts</span></div>
+    const row = m => `<div class="mission ${m.done ? 'done' : ''}">
+      <div class="row"><strong>${esc(m.text)}</strong></div>
       <div class="progress"><i style="width:${(m.progress / m.target) * 100}%"></i></div>
-      <div class="row small"><span>${m.progress.toLocaleString()} / ${m.target.toLocaleString()}</span>
-        ${m.claimed ? '<span class="muted">Claimed ✓</span>' : m.done ? `<button class="primary small-btn" data-act="claimMission" data-arg="${period}|${m.id}">Claim</button>` : ''}</div>
+      <div class="row small"><span>${m.progress.toLocaleString()} / ${m.target.toLocaleString()}</span>${m.done ? '<span class="good-text">Complete ✓</span>' : ''}</div>
     </div>`;
     const now = new Date();
     const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -68,12 +67,12 @@ export function initSocialUI() {
     const body = tab === 'missions' ? `
       <h3>Daily missions <small class="muted">reset in ${hrs}h</small></h3><div class="mission-list">${daily.map(m => row(m, 'daily')).join('')}</div>
       <h3>Weekly missions <small class="muted">reset Monday</small></h3><div class="mission-list">${weekly.map(m => row(m, 'weekly')).join('')}</div>
-      <p class="muted small">Missions count progress from any run (God mode excluded). Claimed points go to your lifetime total on the leaderboard.</p>`
+      <p class="muted small">Missions count progress from any run (God mode excluded). They don't give points: leaderboard points come only from runs.</p>`
       : tab === 'achievements' ? `
-      <p class="muted">${doneCount} / ${ACHIEVEMENTS.length} unlocked. Achievement points are added to your lifetime total automatically.</p>
+      <p class="muted">${doneCount} / ${ACHIEVEMENTS.length} unlocked.</p>
       <div class="achievement-grid">${ACHIEVEMENTS.map(a => `<div class="achievement ${unlocked[a.id] ? 'got' : ''}">
         <span class="trophy">${unlocked[a.id] ? '🏆' : '🔒'}</span>
-        <div><strong>${esc(a.name)}</strong><p class="small muted">${esc(a.desc)}</p><span class="pts">+${a.pts.toLocaleString()} pts</span>${unlocked[a.id] ? `<small class="muted"> · ${new Date(unlocked[a.id]).toLocaleDateString()}</small>` : ''}</div>
+        <div><strong>${esc(a.name)}</strong><p class="small muted">${esc(a.desc)}</p>${unlocked[a.id] ? `<small class="muted"> · ${new Date(unlocked[a.id]).toLocaleDateString()}</small>` : ''}</div>
       </div>`).join('')}</div>`
       : pointsHelp();
     return `<section class="panel">
@@ -151,17 +150,6 @@ export function initSocialUI() {
     dexEntry: id => { S.modal = { type: 'dexEntry', id: +id }; render(); },
     openMissions: () => go('missions', { tab: 'missions' }),
     missionsTab: tab => go('missions', { tab }),
-    claimMission: async arg => {
-      const [period, id] = arg.split('|');
-      try {
-        const pts = await claimMission(period, id);
-        if (pts) sfx('achievement');
-        persistProfile();
-        refreshMissionCount();
-        S.scores = await api.scores().catch(() => S.scores);
-      } catch (e) { toast('Could not claim: ' + e.message); }
-      render();
-    },
     openLeaderboard: () => loadBoard('best'),
     boardKind: kind => loadBoard(kind),
     boardFriends: (_, el) => { S.ui.friendsOnly = el.checked; render(); },
@@ -203,7 +191,7 @@ async function loadBoard(kind) {
 function pointsHelp() {
   return `<p class="muted">Every win and catch adds points to your run. Your best run goes on the leaderboard.</p>
     <table class="board">${POINT_RULES.map(([what, pts]) => `<tr><td>${esc(what)}</td><td><b>${esc(pts)}</b></td></tr>`).join('')}</table>
-    <p class="muted small">Run points are multiplied by difficulty: Easy ×${DIFF_POINT_MULT.easy}, Medium ×${DIFF_POINT_MULT.medium}, Hard ×${DIFF_POINT_MULT.hard}, Hell ×${DIFF_POINT_MULT.hell}. Runs that use God mode score 0. Missions and achievements add bonus points to your lifetime total.</p>`;
+    <p class="muted small">Run points are multiplied by difficulty: Easy ×${DIFF_POINT_MULT.easy}, Medium ×${DIFF_POINT_MULT.medium}, Hard ×${DIFF_POINT_MULT.hard}, Hell ×${DIFF_POINT_MULT.hell}. Runs that use God mode score 0. Your total is the sum of all your runs; missions and achievements don't give points.</p>`;
 }
 
 /** Pokédex entry modal (rendered by ui.js's modal switch). */
