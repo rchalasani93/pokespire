@@ -10,6 +10,22 @@ import {
   ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
   spinPokeStop, martStock, eliteReward, healParty, storeCaught, partySummary, addItem,
 } from './game.js';
+
+// Map pictograms (drawn, not emoji, so they look the same on every OS).
+const NODE_SVG = {
+  wild: '<path d="M5 20c0-5 1-9 3-13M11 20c0-6 1-10 4-14M17 20c-1-4-2-7-5-9"/>',
+  trainer: '<path d="M4 15a8 8 0 0 1 16 0Z"/><path d="M2 15h14l5 2"/>',
+  villain: '<path d="M12 3a8 8 0 0 0-5 14v3h10v-3a8 8 0 0 0-5-14Z"/><circle cx="9" cy="11" r="1.6"/><circle cx="15" cy="11" r="1.6"/><path d="M10 20v-2M14 20v-2"/>',
+  elite: '<path d="m12 3 2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8Z"/>',
+  gym: '<path d="M8 3l2 7M16 3l-2 7"/><circle cx="12" cy="15" r="5.5"/>',
+  legendary: '<path d="M12 3 20 8v8l-8 5-8-5V8Z"/><circle cx="12" cy="12" r="2.5"/>',
+  stop: '<path d="M12 3 21 12 12 21 3 12Z"/>',
+  mart: '<path d="M4 10h16v10H4ZM3 10l2-6h14l2 6"/><path d="M10 20v-5h4v5"/>',
+  center: '<path d="M9 4h6v5h5v6h-5v5H9v-5H4V9h5Z"/>',
+  boss: '<path d="M3 18 5 7l5 5 2-7 2 7 5-5 2 11Z"/>',
+};
+const nodeIcon = (type) =>
+  `<svg class="node-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${NODE_SVG[type] || ''}</svg>`;
 import { ITEMS, BAG_POCKETS, trainerSpriteUrl } from './content.js';
 import { startBattle, applyItem } from './battle.js';
 import { renderBattle, beginBattle, onBattleAction, resumeBattleUI } from './battle-ui.js';
@@ -341,14 +357,14 @@ SCREENS.map = () => {
     const info = NODE_INFO[n.type];
     const cls = [avail.has(n.id) ? 'available' : '', run.visited.includes(n.id) ? 'visited' : '', run.pos === n.id ? 'current' : '', n.type].join(' ');
     const label = n.id === 'boss' ? bossLabel() : info.label;
-    return `<button class="node ${cls}" style="left:${p.x}%;top:${p.y}px" data-act="visitNode" data-arg="${n.id}" ${avail.has(n.id) ? '' : 'disabled'} title="${esc(label)}" aria-label="${esc(label)}">${info.icon}</button>`;
+    return `<button class="node ${cls}" style="left:${p.x}%;top:${p.y}px" data-act="visitNode" data-arg="${n.id}" ${avail.has(n.id) ? '' : 'disabled'} title="${esc(label)}" aria-label="${esc(label)}">${nodeIcon(n.type)}</button>`;
   }).join('');
   return `<section class="map-layout">
     <div class="panel map-panel">
       <div class="row"><div><p class="eyebrow">${esc(ACTS[run.act - 1].name)}</p><h2>Choose your path</h2></div>
         <span class="muted">Boss: ${esc(bossLabel())}</span></div>
       <div class="map" style="height:${height}px"><svg width="100%" height="${height}">${lines}</svg>${btns}</div>
-      <div class="legend">${Object.entries(NODE_INFO).filter(([k]) => k !== 'boss').map(([, v]) => `<span title="${esc(v.desc)}">${v.icon} ${v.label}</span>`).join('')}</div>
+      <div class="legend">${Object.entries(NODE_INFO).filter(([k]) => k !== 'boss').map(([k, v]) => `<span title="${esc(v.desc)}">${nodeIcon(k)} ${v.label}</span>`).join('')}</div>
     </div>
     ${sidePanel()}
   </section>`;
@@ -419,8 +435,8 @@ SCREENS.node = () => {
   if (n.type === 'stop') {
     return `<section class="panel narrow center-text">
       <p class="eyebrow">PokéStop</p>
-      <div class="pokestop ${n.spun ? 'spun' : ''}">🔷</div>
-      ${n.spun ? `<h2>Items received</h2><ul class="loot">${n.result.items.map(([it, c]) => `<li>${itemImg(it)} ${esc(it)} ×${c}</li>`).join('')}${n.result.money ? `<li>💰 ₽${n.result.money.toLocaleString()}</li>` : ''}</ul>
+      <div class="pokestop ${n.spun ? 'spun' : ''}">${nodeIcon('stop')}</div>
+      ${n.spun ? `<h2>Items received</h2><ul class="loot">${n.result.items.map(([it, c]) => `<li>${itemImg(it)} ${esc(it)} ×${c}</li>`).join('')}${n.result.money ? `<li>₽${n.result.money.toLocaleString()}</li>` : ''}</ul>
         <button class="primary" data-act="leaveNode">Continue</button>`
         : `<h2>Spin the Photo Disc</h2><p class="muted">PokéStops hand out free supplies.</p><button class="primary big" data-act="spinStop">Spin!</button>`}
     </section>`;
