@@ -12,7 +12,7 @@
   },
   "license": "UNLICENSED",
   "devDependencies": {
-    "@pkmn/dex": "^0.10.11",
+    "@pkmn/dex": "^0.10.15",
     "wrangler": "^4.153.0"
   },
   "private": true,
