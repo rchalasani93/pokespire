@@ -13,7 +13,7 @@
   "license": "UNLICENSED",
   "devDependencies": {
     "@pkmn/dex": "^0.10.11",
-    "wrangler": "^4.153.0"
+    "wrangler": "^4.158.0"
   },
   "private": true,
   "type": "module",
