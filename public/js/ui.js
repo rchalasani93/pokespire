@@ -653,7 +653,7 @@ function nodePos(n) {
   // Deterministic jitter so the map looks hand-drawn
   const h = [...n.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 997, 7);
   // Squeezed into 8%–92% so the node cards at the edges stay inside the map
-  const x = n.id === 'boss' ? 50 : 8 + (((n.c + 0.5) / 7) * 100 + ((h % 7) - 3)) * 0.84;
+  const x = n.id === 'boss' ? 50 : 8 + (((n.c + 0.5) / 7) * 100 + ((h % 7) - 3) * 0.5) * 0.84;
   const y = (ROWS - 1 - n.r) * 76 + 50 + ((h % 5) - 2) * 3;
   return { x, y };
 }

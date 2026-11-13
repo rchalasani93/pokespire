@@ -203,7 +203,7 @@ function debounced(key, payload, delay) {
       if (latest[key] === value) delete latest[key];
       status('Saved', 'ok');
     } catch (e) {
-      status(e.status === 401 ? 'Signed out — progress not saved' : 'Save failed — will retry', 'err');
+      status(e.status === 401 ? 'Signed out. Progress is not being saved.' : 'Save failed. Retrying.', 'err');
       if (e.status !== 401) timers[key] = setTimeout(() => debounced(key, latest[key], 0), 5000);
     }
   }, delay);
