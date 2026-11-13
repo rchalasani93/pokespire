@@ -41,7 +41,11 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Shinies.** Wild, Elite and Legendary Pokémon are shiny 1 time in 512, with a sparkle when they appear. Catching a shiny unlocks a shiny starter option for its evolution family. A shiny catch also counts as catching the species. Wild Pokémon in battle show a Poké Ball mark if you've caught that species and a gold ✦ if you've caught its shiny; the Pokédex shows the same marks and can filter to shinies only. Ten shiny achievements and a weekly shiny mission track shiny hunting. Admins can toggle a view-only "every shiny unlocked" option that doesn't add real catches or achievements.
 
-**Pokédex.** The main menu's Pokédex lists every species you've caught (with shinies marked), by region, with search, type filter and sorting; tick "show uncaught" to browse silhouettes of the rest. Each entry shows base stats, abilities, what you've unlocked for the family, and its evolution line.
+**Pokédex.** Species you meet in battle or see at a Poké Ball node are registered as seen; tick "Include Pokémon I've seen" to list them with their names and evolution lines. The main menu's Pokédex lists every species you've caught (with shinies marked), by region, with search, type filter and sorting; tick "show uncaught" to browse silhouettes of the rest. Each entry shows base stats, abilities, what you've unlocked for the family, and its evolution line.
+
+**Egg moves.** When you pick a starter you can choose up to 4 of its egg moves (its family's first stage's egg moves, from the latest games that have them). Slots you leave free keep its usual Lv 5 moves, and a starter always keeps at least one attacking move.
+
+**Stat changes in battle.** Raised and lowered stats (Attack, Defense, Sp. Atk, Sp. Def, Speed, accuracy, evasion) show as chips under each HP bar, e.g. "Atk +2" or "Spe −1", along with confusion.
 
 **Starters by region.** Your first run offers the three Kanto starters. Every Pokémon you catch, on any run, joins the starter pool for future runs, grouped by its home region (Kanto through Paldea).
 
@@ -54,11 +58,12 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 - Status conditions follow the main games and show under the HP bar: burn (1/16 HP per turn, halves physical damage), paralysis (Speed halved, 25% chance to be unable to move), poison (1/8), bad poison (1/16, 2/16, … and back to regular poison after battle), sleep (1–3 turns) and freeze (20% thaw chance per turn; Fire moves, Scald and self-thawing moves like Flame Wheel thaw it). Type immunities apply, including Grass types against powder moves.
 - Catching uses the Gen 5+ catch formula with ball and status modifiers and shake checks.
 
-**The map.** Each act is a branching map with these nodes:
+**The map.** Each act is a branching map. Nodes show a sprite like PokéRez does (Meowth runs the PokéMart, Chansey the Pokémon Center, Gym nodes show the next Gym Leader in Classic mode) with the emoji below as a fallback:
 
 | Node | What happens |
 | --- | --- |
 | 🌿 Wild Pokémon | Random wild Pokémon from all regions, scaled to the act |
+| 🔴 Poké Ball | Three Pokémon are offered and you recruit one. Each shows its rarity (Common, Uncommon, Rare, Very rare, from the family's strongest evolution) and the screen lists the odds for the act. Pokémon already on your team aren't offered. A recruit counts as a catch. |
 | 🧢 Trainer | Random trainer classes with themed teams and prize money |
 | 💀 Villain Team | Rocket, Magma, Aqua, Galactic, Plasma, Flare, Skull, Yell and Star grunts and admins |
 | ⭐ Elite Pokémon | Powerful wild Pokémon with perfect IVs and rare drops |
@@ -67,9 +72,16 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 | 📖 Move Tutor | Teach TM/tutor moves for money, or relearn old moves for free |
 | 🏪 PokéMart | Buy balls, medicine, Exp. Candy and evolution items |
 | 🏥 Pokémon Center | Full heal, plus the PC Box |
-| 👑 Boss | Act I: a Gym Leader. Act II: a villain team boss. Act III: four random Elite Four members from across the regions, then a random Champion, then the **Hall of Fame** |
+| ☠️ Villain Boss | Act II only: the villain team's leader waits on one of the later floors |
+| 👑 Boss | Every act ends with a Gym Leader (3, 4 and 5 Pokémon). In Classic mode it's the region's next Gym in order. After Act III's Gym Leader come the Elite Four and the Champion, then the **Hall of Fame** |
+
+**Map seeds.** Every run has a seed that fixes each act's map layout and node types. It's shown on the map with a Copy button. When choosing a starter you can type a seed to replay a route or race a friend on the same maps, or use today's daily seed (the same for everyone that day). Battles, offers and rewards stay random.
+
+**Pokémon League.** There's no free healing between Elite Four battles. After each win you can pay the League nurse for one full heal before the next battle (HP, PP, status and fainted Pokémon; on Hell, fainted Pokémon are already gone). Each heal costs more than the last.
 
 If your whole team faints, the run ends. It's recorded in your history either way.
+
+**Feedback.** Players can report bugs, wrong Pokémon data, balance problems and ideas from the account menu (Send feedback). The report includes the screen they were on and the run's act, difficulty and seed. The database limits each player to 5 reports an hour and 20 a day. Admins read and resolve reports from the Admin panel (Player feedback); every status change is written to an admin log.
 
 ## Tech
 
@@ -90,6 +102,7 @@ public/            static site (index.html, css/, js/, data/)
   js/battle-ui.js  battle screen
   js/audio.js      chiptune music, sound effects, cries
 supabase/schema.sql  database tables, security policies and sign-up trigger
+supabase/feedback.sql  feedback reports (rate-limited) and the admin action log
 scripts/           data generator and local server
 tests/             mechanics and battle-engine tests
 .github/workflows/deploy.yml  tests and deploys to GitHub Pages on every push to develop
@@ -100,7 +113,7 @@ tests/             mechanics and battle-engine tests
 ### 1. Supabase (one time)
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor → New query**, paste the contents of `supabase/schema.sql`, and click **Run**.
+2. Open **SQL Editor → New query**, paste the contents of `supabase/schema.sql`, and click **Run**. Do the same with `supabase/anti-cheat.sql` and `supabase/feedback.sql` (feedback reports and the admin log).
 3. Under **Authentication → Sign In / Providers → Email**, choose whether players must confirm their email. If confirmation is on, set **Authentication → URL Configuration → Site URL** to your Pages URL (for example `https://rchalasani93.github.io/pokespire/`) so the confirmation link opens the game.
 4. From **Project Settings → API**, copy the **Project URL** and the **anon public** key.
 

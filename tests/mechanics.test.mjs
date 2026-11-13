@@ -1,9 +1,9 @@
 // Run with: node tests/mechanics.test.mjs
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { DEX, MOVES, LEARN, TYPES, BY_NAME, FORMS, MACHINES, loadMachines, canLearnMachine } from '../public/js/data.js';
+import { DEX, MOVES, LEARN, TYPES, BY_NAME, FORMS, MACHINES, EGG, loadMachines, canLearnMachine } from '../public/js/data.js';
 const load = f => JSON.parse(readFileSync(new URL(`../public/data/${f}.json`, import.meta.url)));
-Object.assign(DEX, load('pokedex')); Object.assign(MOVES, load('moves')); Object.assign(LEARN, load('learnsets')); Object.assign(TYPES, load('types')); Object.assign(FORMS, load('forms')); loadMachines(load('machines'));
+Object.assign(DEX, load('pokedex')); Object.assign(MOVES, load('moves')); Object.assign(LEARN, load('learnsets')); Object.assign(TYPES, load('types')); Object.assign(FORMS, load('forms')); Object.assign(EGG, load('eggmoves')); loadMachines(load('machines'));
 for (const [id, s] of Object.entries(DEX)) { s.id = +id; BY_NAME[s.n.toLowerCase()] = +id; }
 
 const M = await import('../public/js/mechanics.js');
@@ -168,7 +168,7 @@ assert.equal(crashes, 0, 'battle engine crashed');
     for (let k = 0; k < 60; k++) regions.add(regionOf(G.buildEncounter(run, { type: 'wild', r: 2 }).enemy[0].id));
     assert.ok(regions.size > 3, `${region.name} wilds from many regions`);
     run.act = 2;
-    const villain = G.bossEncounter(run).trainer.team;
+    const villain = G.buildEncounter(run, { type: 'villainBoss', r: 7 }).trainer.team;
     assert.ok(C.CLASSIC[region.name].villains.includes(villain), `${region.name} villain ${villain}`);
     run.act = 3; G.startLeague(run);
     assert.deepEqual(run.league.members.map(m => m.split('|')[0]), C.CLASSIC[region.name].e4);
@@ -362,3 +362,127 @@ console.log('Battle gimmick, held item and reward tests passed.');
   assert.ok(!types.includes('stop'));
 }
 console.log('TM, starter move and Move Tutor tests passed.');
+
+// Map seeds, Poké Ball recruit offers and the League heal
+{
+  // The same seed gives the same map for each act; different acts and seeds differ
+  const shape = m => Object.values(m.nodes).map(n => `${n.id}:${n.type}:${n.next.join(',')}`).sort().join('|');
+  assert.equal(shape(G.generateMap(1, 'ABC123')), shape(G.generateMap(1, 'ABC123')));
+  assert.notEqual(shape(G.generateMap(1, 'ABC123')), shape(G.generateMap(2, 'ABC123')));
+  assert.notEqual(shape(G.generateMap(1, 'ABC123')), shape(G.generateMap(1, 'XYZ789')));
+  assert.equal(G.normalizeSeed(' abc-12 '), 'ABC-12');
+  assert.equal(G.normalizeSeed('<script>'), null);
+  assert.equal(G.normalizeSeed('A'.repeat(17)), null);
+  assert.match(G.dailySeed(new Date(Date.UTC(2026, 10, 13))), /^D-20261113$/);
+  const run = G.newRun(1, 'medium', 'classic', { seed: 'race-1' });
+  assert.equal(run.seed, 'RACE-1');
+  assert.equal(shape(run.map), shape(G.generateMap(1, 'RACE-1')));
+  assert.ok(G.normalizeSeed(G.newRun(1).seed), 'runs without a chosen seed get a random one');
+
+  // Seeded maps still have every node type and one Legendary; Poké Ball nodes show up across maps
+  let recruits = 0;
+  for (let i = 0; i < 60; i++) {
+    const types = Object.values(G.generateMap(1 + (i % 3), 'S' + i).nodes).map(n => n.type);
+    assert.equal(types.filter(t => t === 'legendary').length, 1);
+    recruits += types.filter(t => t === 'recruit').length;
+  }
+  assert.ok(recruits > 30, 'Poké Ball nodes appear on maps: ' + recruits);
+
+  // Rarity follows the family's strongest evolution
+  assert.equal(G.RECRUIT_RARITIES[G.recruitRarity(147)].key, 'veryRare', 'Dratini');
+  assert.equal(G.RECRUIT_RARITIES[G.recruitRarity(10)].key, 'common', 'Caterpie');
+
+  // Offers: three different families, none already on the team, at the node's level
+  const node = { r: 5 };
+  for (let i = 0; i < 200; i++) {
+    const offers = G.recruitOffers(run, node);
+    assert.equal(offers.length, 3);
+    const roots = offers.map(o => (DEX[o.mon.id].p ? null : o.mon.id));
+    assert.ok(offers.every(o => o.mon.lv === Math.max(3, G.rowLevel(1, 5) - 1)));
+    assert.ok(offers.every(o => o.mon.moves.length > 0 && o.mon.hp > 0));
+    assert.ok(!offers.some(o => [1, 2, 3].includes(o.mon.id)), 'team family excluded');
+    assert.equal(new Set(offers.map(o => o.mon.id)).size, 3, String(roots));
+  }
+
+  // League heal: only between battles, once per battle, price rises
+  run.league = { stage: 0, members: [], champion: '' };
+  assert.equal(G.canLeagueHeal(run), false);
+  run.league.stage = 1;
+  assert.equal(G.canLeagueHeal(run), true);
+  const p1 = G.leagueHealPrice(run);
+  run.league.heals = 1; run.league.healedAt = 1;
+  assert.equal(G.canLeagueHeal(run), false);
+  run.league.stage = 2;
+  assert.ok(G.canLeagueHeal(run) && G.leagueHealPrice(run) > p1);
+  run.league.stage = 5;
+  assert.equal(G.canLeagueHeal(run), false);
+}
+console.log('Map seed, Poké Ball and League heal tests passed.');
+
+// Every act ends with a Gym Leader; the villain boss is a node in Act II; starters can pick egg moves
+{
+  const D = await import('../public/js/data.js');
+  assert.deepEqual(G.ACTS.map(a => a.boss), ['gym', 'gym', 'gymLeague']);
+  for (let act = 1; act <= 3; act++) {
+    const run = G.newRun(4, 'medium', 'classic');
+    run.act = act;
+    const spec = G.bossEncounter(run);
+    assert.equal(spec.kind, 'gym', `Act ${act} boss is a Gym Leader`);
+    assert.equal(spec.enemy.length, [3, 4, 5][act - 1]);
+    assert.equal(Math.max(...spec.enemy.map(m => m.lv)), G.ACTS[act - 1].bossLv);
+  }
+  // Classic Kanto: bosses follow the region's Gym order
+  const kanto = G.newRun(4, 'medium', 'classic');
+  assert.equal(G.bossEncounter(kanto).trainer.leader, 'Brock');
+  assert.equal(G.nextGymLeader(kanto).name, 'Brock');
+  assert.equal(G.nextGymLeader(G.newRun(4, 'medium', 'random')), null);
+  // Villain boss: exactly one per Act II map, none in Acts I and III
+  for (let i = 0; i < 40; i++) {
+    for (const act of [1, 2, 3]) {
+      const n = Object.values(G.generateMap(act, 'V' + i).nodes).filter(x => x.type === 'villainBoss');
+      assert.equal(n.length, act === 2 ? 1 : 0);
+      if (act === 2) assert.ok(n[0].r >= 6 && n[0].r <= 9);
+    }
+  }
+  const run2 = G.newRun(4, 'medium', 'classic'); run2.act = 2;
+  const vb = G.buildEncounter(run2, { type: 'villainBoss', r: 7 });
+  assert.equal(vb.kind, 'villainBoss');
+  assert.equal(vb.trainer.name, 'Giovanni');
+  // Node art exists for every node type
+  for (const t of Object.keys(G.NODE_INFO)) assert.ok(G.nodeArt(kanto, { type: t, id: t }).kind);
+  assert.equal(G.nodeArt(kanto, { type: 'boss' }).name, 'brock');
+
+  // Egg moves: Charmander (and Charizard, from Charmander) get Charmander's egg moves
+  const egg = D.eggMovesFor(4);
+  assert.ok(egg.includes('dragonrush') && egg.includes('bellydrum'), String(egg));
+  assert.deepEqual(D.eggMovesFor(6), egg);
+  const set = G.starterMoveset(4, ['dragonrush', 'bite']);
+  assert.equal(set.length, 4);
+  assert.deepEqual(set.slice(0, 2), ['dragonrush', 'bite']);
+  // Moves outside the egg pool are ignored, at most 4 are kept, and there's always an attacking move
+  assert.ok(!G.starterMoveset(4, ['hyperbeam']).includes('hyperbeam'));
+  assert.equal(G.starterMoveset(4, egg).length, 4);
+  const statusOnly = egg.filter(m => MOVES[m].c === 'S');
+  if (statusOnly.length) assert.ok(G.starterMoveset(4, statusOnly).some(m => MOVES[m].c !== 'S'));
+  const r = G.newRun(4, 'medium', 'classic', { moves: ['dragonrush'] });
+  assert.equal(r.party[0].moves[0].id, 'dragonrush');
+  assert.equal(r.party[0].moves[0].pp, MOVES.dragonrush.pp);
+  assert.deepEqual(G.newRun(4).party[0].moves.map(x => x.id), M.starterMoves(4, 5));
+  // A species with no egg moves keeps its usual moves
+  const noEgg = Object.keys(DEX).map(Number).find(id => !D.eggMovesFor(id).length && !DEX[id].p);
+  assert.deepEqual(G.starterMoveset(noEgg, ['tackle']), M.starterMoves(noEgg, 5));
+}
+console.log('Gym boss, villain boss node, node art and egg move tests passed.');
+
+// Stat stages show in the battle view
+{
+  const run = G.newRun(4, 'medium', 'classic');
+  Bt.startBattle(run, { kind: 'wild', enemy: [M.createMon(16, 5)], canCatch: true, canRun: true, ai: 0 });
+  run.battle.pv.stg.atk = 2; run.battle.ev.stg.spe = -1;
+  const v = Bt.battleView(run);
+  assert.deepEqual(v.p.stg, { atk: 2 });
+  assert.deepEqual(v.e.stg, { spe: -1 });
+  run.battle.pv.stg.atk = 0;
+  assert.equal(Bt.battleView(run).p.stg, undefined);
+}
+console.log('Battle stat stage view tests passed.');

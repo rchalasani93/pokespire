@@ -1,7 +1,7 @@
 // Screens, overlays and player flows (everything except the battle screen).
 import { S, defaultProfile, normalizeProfile } from './state.js';
-import { api, configured, saveRun, saveProfile, flushSaves, cancelRunSave, joinPresence, leavePresence } from './api.js';
-import { FORMS, canLearnMachine, DEX, MOVES, LEARN, REGIONS, ABILITIES, regionOf, familyRoot, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS, movesAtLevel } from './data.js';
+import { api, FEEDBACK_KINDS, configured, saveRun, saveProfile, flushSaves, cancelRunSave, joinPresence, leavePresence } from './api.js';
+import { FORMS, canLearnMachine, DEX, MOVES, LEARN, REGIONS, ABILITIES, regionOf, familyRoot, eggMovesFor, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS, movesAtLevel } from './data.js';
 import {
   createMon, calcStats, maxHp, monName, NATURES, STAT_LABELS, STAT_SHORT, natureMod, natureLabel, ivJudge, expForLevel, gainExp, levelUp, evoItemFor,
   levelEvolution, itemEvolution, evolve, replaceMove, teraType, starterMoves,
@@ -10,6 +10,7 @@ import {
   ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
   martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf, runRegion,
   generateRewards, rerollCost, TIER_COLORS, rewardShop, tutorOffers, tutorPrice,
+  recruitOffers, recruitOdds, RECRUIT_RARITIES, nextGymLeader, starterMoveset, nodeArt, leagueHealPrice, canLeagueHeal, normalizeSeed, dailySeed,
 } from './game.js';
 import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl, HELD_KINDS, KEY_ITEMS } from './content.js';
 import { clearBattleForm, setBattleHooks } from './battle.js';
@@ -51,6 +52,7 @@ function userMenuHtml() {
     ${S.userMenu ? `<div class="user-dropdown" role="menu">
       <button role="menuitem" data-act="menuSettings">Settings<small>Sound and text speed</small></button>
       ${S.user.isAdmin ? '<button role="menuitem" class="admin-btn" data-act="menuAdmin">Admin panel<small>God mode and debug tools</small></button>' : ''}
+      <button role="menuitem" data-act="openFeedback">Send feedback<small>Report a bug or suggest an idea</small></button>
       <button role="menuitem" data-act="menuLogout">Log out</button>
     </div>` : ''}
   </div>`;
@@ -434,6 +436,18 @@ SCREENS.mode = () => {
 };
 registerActions({
   starterNature: v => { S.modal.nat = v === '' ? undefined : +v; },
+  starterSeed: v => { S.modal.seed = v; },
+  starterEggMove: id => {
+    const m = S.modal;
+    if (m?.type !== 'confirmStarter' || !eggMovesFor(m.id).includes(id)) return;
+    const cur = m.moves || [];
+    if (cur.includes(id)) m.moves = cur.filter(x => x !== id);
+    else if (cur.length < 4) m.moves = [...cur, id];
+    else { toast('You can pick up to 4 egg moves. Remove one first.'); sfx('error'); return; }
+    render();
+  },
+  starterEggClear: () => { if (S.modal) { S.modal.moves = []; render(); } },
+  starterDailySeed: () => { S.modal.seed = dailySeed(); render(); },
   starterAbility: v => { S.modal.ab = v || undefined; },
   starterShiny: (_, el) => { S.modal.shiny = el.checked; render(); },
   dexShinyToggle: (_, el) => { S.ui.dexShiny = el.checked; render(); },
@@ -619,7 +633,9 @@ registerActions({
   confirmStarter: async id => {
     const difficulty = S.modal?.difficulty || 'medium';
     const mode = S.modal?.mode || 'classic';
-    const choice = { nat: S.modal?.nat, ab: S.modal?.ab, shiny: S.modal?.shiny && unlockedFor(+id).shiny };
+    const rawSeed = String(S.modal?.seed || '').trim();
+    if (rawSeed && !normalizeSeed(rawSeed)) { toast('A seed can only use letters, numbers and dashes (up to 16).'); sfx('error'); return; }
+    const choice = { nat: S.modal?.nat, ab: S.modal?.ab, shiny: S.modal?.shiny && unlockedFor(+id).shiny, seed: rawSeed, moves: S.modal?.moves || [] };
     S.modal = null;
     S.run = newRun(+id, difficulty, mode, choice);
     track('runStart');
@@ -636,7 +652,8 @@ registerActions({
 function nodePos(n) {
   // Deterministic jitter so the map looks hand-drawn
   const h = [...n.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 997, 7);
-  const x = n.id === 'boss' ? 50 : ((n.c + 0.5) / 7) * 100 + ((h % 7) - 3);
+  // Squeezed into 8%–92% so the node cards at the edges stay inside the map
+  const x = n.id === 'boss' ? 50 : 8 + (((n.c + 0.5) / 7) * 100 + ((h % 7) - 3)) * 0.84;
   const y = (ROWS - 1 - n.r) * 76 + 50 + ((h % 5) - 2) * 3;
   return { x, y };
 }
@@ -661,21 +678,32 @@ SCREENS.map = () => {
     const info = NODE_INFO[n.type];
     const cls = [avail.has(n.id) ? 'available' : '', run.visited.includes(n.id) ? 'visited' : '', run.pos === n.id ? 'current' : '', n.type].join(' ');
     const label = n.id === 'boss' ? bossLabel() : info.label;
-    return `<button class="node ${cls}" style="left:${p.x}%;top:${p.y}px" data-act="visitNode" data-arg="${n.id}" ${avail.has(n.id) ? '' : 'disabled'} title="${esc(label)}" aria-label="${esc(label)}">${info.icon}</button>`;
+    const short = n.id === 'boss' ? 'Gym Boss' : NODE_SHORT[n.type] || info.label;
+    return `<button class="node ${cls}" style="left:${p.x}%;top:${p.y}px" data-act="visitNode" data-arg="${n.id}" ${avail.has(n.id) ? '' : 'disabled'} title="${esc(label)}" aria-label="${esc(label)}">${nodeArtHtml(run, n, info)}<b>${esc(short)}</b></button>`;
   }).join('');
   return `<section class="map-layout">
     <div class="panel map-panel">
       <div class="row"><div><p class="eyebrow">${esc(ACTS[run.act - 1].name)} ${modeBadge(modeOf(run))} ${diffBadge(run.difficulty || 'medium')}${modeOf(run) === 'classic' ? ` · ${esc(runRegion(run))}` : ''}</p><h2>Choose your path</h2></div>
         <span class="muted">Boss: ${esc(bossLabel())}</span></div>
+      ${run.seed ? `<p class="seed-line small muted">Map seed <code>${esc(run.seed)}</code>${run.seed === dailySeed() ? ' (today\'s daily seed)' : ''} <button class="small-btn" data-act="copySeed">Copy</button></p>` : ''}
       <div class="map" style="height:${height}px"><svg width="100%" height="${height}">${lines}</svg>${btns}</div>
-      <div class="legend">${Object.entries(NODE_INFO).filter(([k]) => k !== 'boss').map(([, v]) => `<span title="${esc(v.desc)}">${v.icon} ${v.label}</span>`).join('')}</div>
+      <div class="legend">${Object.entries(NODE_INFO).filter(([k]) => !['boss', 'stop'].includes(k) && (k !== 'villainBoss' || run.act === 2)).map(([k, v]) => `<span title="${esc(v.desc)}">${nodeArtHtml(run, { type: k, id: k }, v)} ${v.label}</span>`).join('')}</div>
     </div>
     ${sidePanel()}
   </section>`;
 };
+const NODE_SHORT = { wild: 'Wild', trainer: 'Trainer', villain: 'Villain', villainBoss: 'Villain Boss', elite: 'Elite', gym: 'Gym', legendary: 'Legendary', tutor: 'Tutor', stop: 'Tutor', mart: 'PokéMart', center: 'Center', recruit: 'Poké Ball' };
+/** Node picture: a sprite (item, Pokémon or trainer) with the emoji as a fallback if it can't load. */
+function nodeArtHtml(run, n, info) {
+  const a = nodeArt(run, n);
+  const src = a.kind === 'item' ? itemIconUrl(a.name) : a.kind === 'mon' ? spriteUrl(a.id) : trainerSpriteUrl(a.name);
+  return `<span class="node-art ${a.kind}"><img src="${src}" alt="" loading="lazy" data-onerror="fallback"><i aria-hidden="true">${info.icon}</i></span>`;
+}
 function bossLabel() {
   const b = ACTS[S.run.act - 1].boss;
-  return b === 'gym' ? 'Gym Leader' : b === 'villainBoss' ? 'Villain Team Boss' : 'Elite Four & Champion';
+  const leader = nextGymLeader(S.run);
+  const gym = leader ? `${leader.name} (${leader.region} Gym Leader)` : 'Gym Leader';
+  return b === 'gymLeague' ? `${gym}, then the Elite Four & Champion` : b === 'villainBoss' ? 'Villain Team Boss' : gym;
 }
 function sidePanel() {
   const run = S.run;
@@ -695,6 +723,10 @@ function sidePanel() {
 }
 
 registerActions({
+  copySeed: async () => {
+    try { await navigator.clipboard.writeText(S.run.seed); toast('Seed copied. Enter it when choosing a starter to play the same maps.'); }
+    catch { toast(`Seed: ${S.run.seed}`); }
+  },
   visitNode: id => visitNode(id),
   toMenu: async () => { await flushSaves(); go('menu'); },
   abandonRun: () => { S.modal = { type: 'confirm', text: 'Abandon this run? It will be recorded in your history.', yes: 'confirmAbandon' }; render(); },
@@ -709,13 +741,15 @@ function visitNode(id) {
   run.visited.push(id);
   run.stats.nodes++;
   run.party.forEach(m => { if (m.hp > 0) m.fr = Math.min(255, m.fr + 1); }); // walking together builds friendship
-  if (node.type === 'boss' && ACTS[run.act - 1].boss === 'league') {
-    startLeague(run);
+  if (node.type === 'boss' && run.league) { persistRun(); go('league'); return; }
+  if (node.type === 'recruit') {
+    run.node = { type: 'recruit', id, offers: recruitOffers(run, node) };
+    markSeen(run.node.offers.map(o => o.mon.id));
     persistRun();
-    go('league');
+    go('node');
     return;
   }
-  if (['stop', 'mart', 'center'].includes(node.type)) {
+  if (['tutor', 'stop', 'mart', 'center'].includes(node.type)) {
     run.node = { type: node.type };
     if (node.type === 'stop') run.node.spun = false;
     if (node.type === 'center') healParty(run);
@@ -731,6 +765,7 @@ function visitNode(id) {
 export function launchBattle(spec) {
   const run = S.run;
   applyDifficulty(run, spec);
+  markSeen(spec.enemy.map(m => m.id));
   const events = startBattle(run, spec);
   run.battle.node = spec.node || spec.kind;
   run.stats.battles++;
@@ -742,6 +777,7 @@ export function launchBattle(spec) {
 SCREENS.node = () => {
   const run = S.run, n = run.node;
   if (n.type === 'tutor' || n.type === 'stop') return tutorScreen(run, n);
+  if (n.type === 'recruit') return recruitScreen(run, n);
   if (n.type === 'mart') {
     const stock = martStock(run);
     return `<section class="panel">
@@ -765,6 +801,53 @@ SCREENS.node = () => {
   }
   return '';
 };
+
+// ---------- Poké Ball node ----------
+const RARITY_NAME = Object.fromEntries(RECRUIT_RARITIES.map(r => [r.key, r.name]));
+function recruitScreen(run, n) {
+  const odds = recruitOdds(run.act);
+  const total = odds.reduce((a, b) => a + b, 0);
+  const full = run.party.length >= 6;
+  const card = ({ mon, rarity }, i) => {
+    const sp = DEX[mon.id];
+    return `<button class="recruit-card rarity-${RARITY_NAME[rarity] ? rarity : 'common'}" data-act="recruitPick" data-arg="${i}">
+      <span class="rarity-tag">${esc(RARITY_NAME[rarity] || 'Common')}</span>
+      ${img(artUrl(mon.id, mon.shiny), 'recruit-art', sp.n)}
+      <strong>${esc(sp.n)}${mon.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} ${caughtMark(mon.id, { real: true })}</strong>
+      <span>${sp.t.map(typeBadge).join('')}</span>
+      <small class="muted">Lv ${mon.lv} · ${esc(NATURES[mon.nat])} · ${esc(mon.ab)}</small>
+      <small class="muted">Base stat total ${bst(mon.id)}</small>
+    </button>`;
+  };
+  return `<section class="panel">
+    <div class="row"><div><p class="eyebrow">Poké Ball</p><h2>Choose one Pokémon to recruit</h2></div><span class="muted small">Team ${run.party.length}/6 · Box ${run.box.length}</span></div>
+    <p class="muted">Three Pokémon are waiting here. Pick one and it joins you, like a catch: it counts for your Pokédex, missions and run points.${full ? ' Your team is full, so it goes to the Box. Swap it in at a Pokémon Center.' : ''}</p>
+    <div class="recruit-grid">${n.offers.length ? n.offers.map(card).join('') : '<p class="muted">Nobody showed up this time.</p>'}</div>
+    <table class="odds"><caption>Offer odds in ${esc(ACTS[run.act - 1].name.split(' · ')[0])}</caption>
+      <tr>${RECRUIT_RARITIES.map(r => `<th>${r.name}</th>`).join('')}</tr>
+      <tr>${odds.map(w => `<td>${Math.round((w / total) * 100)}%</td>`).join('')}</tr></table>
+    <p class="muted small">Rarity follows the family's strongest evolution. Pokémon already on your team aren't offered.</p>
+    <div class="row gap"><button data-act="openTeam">Team</button><button data-act="leaveNode">Skip</button></div>
+  </section>`;
+}
+registerActions({
+  recruitPick: i => {
+    const run = S.run, n = run.node;
+    const offer = n?.type === 'recruit' ? n.offers[+i] : null;
+    if (!offer) return;
+    const mon = offer.mon;
+    const isNew = !S.profile.caught.includes(mon.id);
+    const where = storeCaught(run, mon);
+    recordCatch(mon);
+    caughtEvents(mon);
+    S.profile.stats.caught++;
+    run.node = null;
+    persistProfile(); persistRun();
+    playCry(mon.id); sfx('caught');
+    toast(`${monName(mon)} joined ${where === 'party' ? 'your team' : 'the Box'}!${isNew ? ` ${DEX[mon.id].n} is now in your starter pool.` : ''}`);
+    go('map');
+  },
+});
 
 // ---------- Move Tutor ----------
 function tutorScreen(run, n) {
@@ -894,6 +977,24 @@ registerActions({
   useItemOn: i => useFieldItem(S.modal.item, +i),
 });
 
+/** Egg moves to pick from on the starter screen (up to 4; free slots keep the usual Lv 5 moves). */
+function eggPickerHtml(m) {
+  const pool = eggMovesFor(m.id);
+  const root = familyRoot(m.id);
+  if (!pool.length) return `<p class="muted small">${esc(DEX[m.id].n)} has no egg moves, so it starts with its usual moves.</p>`;
+  const picked = m.moves || [];
+  return `<div class="egg-picker">
+    <h4>Egg moves <small class="muted">${picked.length}/4 picked${root !== m.id ? ` · from ${esc(DEX[root].n)}` : ''}</small></h4>
+    <p class="muted small">Choose up to 4 egg moves to start with. Any slots you leave free keep the usual Lv 5 moves.</p>
+    <div class="egg-moves">${pool.map(id => {
+      const mv = MOVES[id], on = picked.includes(id);
+      return `<button type="button" class="egg-move ${on ? 'on' : ''}" style="--tc:${TYPE_COLORS[mv.t]}" data-act="starterEggMove" data-arg="${esc(id)}" aria-pressed="${on}" title="${esc(mv.d || '')}">
+        <strong>${esc(mv.n)}</strong><small>${mv.t} · ${CAT[mv.c]}${mv.p ? ' · Pow ' + mv.p : ''}${mv.a ? ' · Acc ' + mv.a : ''}</small></button>`;
+    }).join('')}</div>
+    ${picked.length ? '<button type="button" class="small-btn" data-act="starterEggClear">Clear picks</button>' : ''}
+  </div>`;
+}
+
 function renderModal() {
   const m = S.modal;
   let body = '';
@@ -910,12 +1011,18 @@ function renderModal() {
     body = `<div class="center-text">${img(artUrl(m.id, m.shiny), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
       <div class="abilities-preview">${[...sp.a.map(a => abilityInfo(a, false)), sp.h ? abilityInfo(sp.h, true) : ''].join('')}</div>
       <h4>Starting moves (Lv 5)</h4>
-      <div class="move-chips">${starterMoves(m.id, 5).map(x => `<span class="move-chip" style="--tc:${TYPE_COLORS[MOVES[x].t]}" title="${esc(MOVES[x].d || '')}">${esc(MOVES[x].n)}<small>${MOVES[x].t} · ${CAT[MOVES[x].c]}${MOVES[x].p ? ' · ' + MOVES[x].p : ''}</small></span>`).join('')}</div>
+      <div class="move-chips">${starterMoveset(m.id, m.moves).map(x => `<span class="move-chip ${(m.moves || []).includes(x) ? 'egg' : ''}" style="--tc:${TYPE_COLORS[MOVES[x].t]}" title="${esc(MOVES[x].d || '')}">${esc(MOVES[x].n)}<small>${MOVES[x].t} · ${CAT[MOVES[x].c]}${MOVES[x].p ? ' · ' + MOVES[x].p : ''}${(m.moves || []).includes(x) ? ' · Egg move' : ''}</small></span>`).join('')}</div>
+      ${eggPickerHtml(m)}
       <h4>Evolution</h4>
       ${evolutionChain(m.id)}
       <h4>Moveset <button class="small-btn" data-act="toggleLearnset">${m.showLearnset ? 'Hide' : 'Show'} all moves</button></h4>
       ${m.showLearnset ? learnsetTable(m.id) : ''}
       ${pickers}
+      <div class="seed-pick">
+        <label>Map seed <small class="muted">(optional)</small><input data-input="starterSeed" value="${esc(m.seed || '')}" maxlength="16" placeholder="Random" autocomplete="off" spellcheck="false"></label>
+        <button class="small-btn" data-act="starterDailySeed">Use today's seed</button>
+      </div>
+      <p class="muted small">The seed fixes each act's map layout, so you can replay a route or race a friend on the same one. Battles and offers stay random.</p>
       <p class="muted">Start a ${GAME_MODES[m.mode].name} · ${DIFFICULTIES[m.difficulty].name} run with ${sp.n}?${m.mode === 'classic' ? ` You'll journey through ${REGIONS[regionOf(m.id)].name}.` : ''}</p></div>
       <div class="row gap"><button data-act="closeModal">Not yet</button><button class="primary" data-act="confirmStarter" data-arg="${m.id}">I choose you!</button></div>`;
   } else if (m.type === 'team') {
@@ -935,6 +1042,26 @@ function renderModal() {
     body = dexEntryHtml(m.id);
   } else if (m.type === 'admin') {
     body = adminHtml();
+  } else if (m.type === 'feedback') {
+    body = m.sent ? `<h2>Thanks!</h2><p>Your report was sent. It helps a lot.</p><div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`
+      : `<h2>Send feedback</h2>
+      <p class="muted small">Found a bug, wrong Pokémon data or a balance problem? Tell me what happened and what you expected. Your username and the screen you were on are attached so I can follow up.</p>
+      <form class="feedback-form" data-form="sendFeedback">
+        <label>Type<select name="kind">${Object.entries(FEEDBACK_KINDS).map(([k, v]) => `<option value="${k}" ${m.kind === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>
+        <label>Message<textarea name="message" minlength="10" maxlength="2000" required placeholder="What happened? Which Pokémon, move or screen?">${esc(m.message || '')}</textarea></label>
+        ${m.error ? `<p class="bad-text small">${esc(m.error)}</p>` : ''}
+        <div class="row gap"><button type="button" data-act="closeModal">Cancel</button><button class="primary" type="submit" ${m.sending ? 'disabled' : ''}>${m.sending ? 'Sending…' : 'Send'}</button></div>
+      </form>`;
+  } else if (m.type === 'adminFeedback') {
+    const list = m.rows || [];
+    body = `<h2>Player feedback <small class="muted">${list.filter(r => r.status === 'open').length} open</small></h2>
+      ${m.loading ? '<p class="muted">Loading…</p>' : m.error ? `<p class="bad-text">${esc(m.error)}</p>` : list.length ? `<div class="feedback-list">${list.map(r => `<article class="feedback-item ${r.status === 'resolved' ? 'resolved' : 'open'}">
+        <div class="row"><strong>${esc(FEEDBACK_KINDS[r.kind] || r.kind)} · ${esc(r.username || 'deleted account')}</strong><span class="muted small">${esc(new Date(r.created_at).toLocaleString())}</span></div>
+        <p>${esc(r.message)}</p>
+        ${r.context ? `<p class="muted small">${esc(r.context)}</p>` : ''}
+        <button class="small-btn" data-act="adminFeedbackStatus" data-arg="${Number(r.id)}|${r.status === 'open' ? 'resolved' : 'open'}">${r.status === 'open' ? 'Mark resolved' : 'Reopen'}</button>
+      </article>`).join('')}</div>` : '<p class="muted">No feedback yet.</p>'}
+      <div class="row gap"><button data-act="openAdmin">Back</button><button class="primary" data-act="closeModal">Close</button></div>`;
   } else if (m.type === 'transfer') {
     const from = m.from != null ? S.run.party[m.from] : null;
     body = from ? `<h2>Give ${esc(from.item)} to…</h2><p class="muted small">If the other Pokémon is holding something, they swap.</p>
@@ -1151,6 +1278,14 @@ function abilitySlot(id, ab) {
   const i = sp.a.indexOf(ab);
   return i >= 0 ? String(i) : ab === sp.h ? 'H' : null;
 }
+/** Register species as seen in the Pokédex (caught ones count as seen too). */
+export function markSeen(ids) {
+  if (!S.profile) return;
+  S.profile.seen ||= [];
+  let added = false;
+  for (const id of ids) if (DEX[id] && !S.profile.seen.includes(id)) { S.profile.seen.push(id); added = true; }
+  if (added) persistProfile();
+}
 export function recordCatch(mon) {
   S.profile.dex ||= {};
   const k = familyRoot(mon.id);
@@ -1362,7 +1497,7 @@ function adminHtml() {
     <label class="check"><input type="checkbox" class="silent" data-act="adminAllStarters" ${S.profile.settings.allStarters ? 'checked' : ''}> Every Pokémon is available as a starter</label>
     <label class="check"><input type="checkbox" class="silent" data-act="adminAllShinies" ${S.profile.settings.allShinies ? 'checked' : ''}> Every shiny is unlocked (Pokédex and shiny starters)</label>
     <p class="muted small">These two unlocks only change what you can view and pick. They don't add real catches, so they never unlock achievements.</p>
-    <div class="row gap"><button data-act="adminAchievements">Mark all achievements complete</button></div>
+    <div class="row gap"><button data-act="adminAchievements">Mark all achievements complete</button><button data-act="adminFeedback">Player feedback</button></div>
     <p class="muted small">Achievements give no points, so this doesn't change the leaderboard.</p>
     <div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`;
 }
@@ -1378,7 +1513,40 @@ function setLevel(mon, lv) {
   mon.exp = expForLevel(DEX[mon.id].gr, mon.lv);
 }
 
+function feedbackContext() {
+  const r = S.run;
+  return [`screen: ${S.screen}`, r ? `act ${r.act}` : '', r ? (r.difficulty || 'medium') : '', normalizeSeed(r?.seed) ? `seed ${normalizeSeed(r.seed)}` : ''].filter(Boolean).join(' · ').slice(0, 120);
+}
 registerActions({
+  openFeedback: () => { S.userMenu = false; S.modal = { type: 'feedback', context: feedbackContext() }; render(); },
+  sendFeedback: async fd => {
+    const m = S.modal;
+    if (m?.type !== 'feedback' || m.sending) return;
+    m.kind = String(fd.get('kind') || ''); m.message = String(fd.get('message') || '');
+    m.sending = true; m.error = null; render();
+    try {
+      await api.sendFeedback({ kind: m.kind, message: m.message, context: m.context });
+      m.sent = true;
+    } catch (e) { m.error = e.message || 'Could not send. Please try again.'; }
+    m.sending = false;
+    if (S.modal === m) render();
+  },
+  adminFeedback: adminOnly(async () => {
+    const m = { type: 'adminFeedback', loading: true };
+    S.modal = m; render();
+    try { m.rows = await api.adminFeedback(); } catch (e) { m.error = e.message; }
+    m.loading = false;
+    if (S.modal === m) render();
+  }),
+  adminFeedbackStatus: adminOnly(async arg => {
+    const [id, status] = arg.split('|');
+    try {
+      await api.setFeedbackStatus(+id, status);
+      const row = (S.modal.rows || []).find(r => Number(r.id) === +id);
+      if (row) row.status = status;
+    } catch (e) { toast(e.message); }
+    render();
+  }),
   openAdmin: adminOnly(() => { S.modal = { type: 'admin' }; render(); }),
   adminGod: adminOnly((_, el) => {
     S.run.god = el.checked;
@@ -1424,12 +1592,16 @@ registerActions({
     S.run.godUsed = true;
     const run = S.run;
     run.act = arg === 'league' ? 3 : +arg;
-    run.map = generateMap(run.act);
+    run.map = generateMap(run.act, run.seed);
     run.league = null; run.node = null; run.battle = null;
     if (arg === 'league') {
       const pre = Object.values(run.map.nodes).find(n => n.r === ROWS - 2);
-      run.pos = pre.id; run.visited = [pre.id];
-    } else { run.pos = null; run.visited = []; }
+      run.pos = 'boss'; run.visited = [pre.id, 'boss'];
+      startLeague(run);
+      S.modal = null; persistRun(); go('league');
+      return;
+    }
+    run.pos = null; run.visited = [];
     S.modal = null; persistRun(); go('map');
   }),
   adminAddMon: adminOnly(fd => {
@@ -1803,6 +1975,7 @@ export function finishBattle() {
 
   if (result === 'caught') {
     const mon = b.caughtMon;
+    const firstCatch = !S.profile.caught.includes(mon.id);
     const where = storeCaught(run, mon);
     const n0 = unlockedFor(mon.id);
     if (recordCatch(mon)) {
@@ -1811,10 +1984,7 @@ export function finishBattle() {
       if (newNat || newAb) steps.push({ type: 'msg', text: `Unlocked for the ${DEX[familyRoot(mon.id)].n} family: ${[newNat && NATURES[mon.nat] + ' nature', newAb && mon.ab + ' ability'].filter(Boolean).join(' and ')}.` });
     }
     if (where === 'box') steps.push({ type: 'msg', text: `${monName(mon)} was sent to the Box.` });
-    if (!S.profile.caught.includes(mon.id)) {
-      S.profile.caught.push(mon.id);
-      steps.push({ type: 'msg', text: `${DEX[mon.id].n} joined your starter pool for future runs!` });
-    }
+    if (firstCatch) steps.push({ type: 'msg', text: `${DEX[mon.id].n} joined your starter pool for future runs!` });
     S.profile.stats.caught++;
     persistProfile();
   }
@@ -1839,9 +2009,14 @@ export function finishBattle() {
     }
     const isActBoss = run.map.nodes[run.pos]?.type === 'boss';
     if (isActBoss && (b.kind === 'gym' || b.kind === 'villainBoss')) {
-      then = 'actDone';
       track('actClear');
       addRunPoints(POINTS.actClear);
+      // Act III: the last Gym Leader opens the way to the Pokémon League
+      if (ACTS[run.act - 1].boss === 'gymLeague' && !run.league) {
+        startLeague(run);
+        steps.push({ type: 'msg', text: 'The road to the Pokémon League is open! The Elite Four await.' });
+        then = 'league';
+      } else then = 'actDone';
     }
     if (b.kind === 'e4') { run.league.stage++; then = 'league'; }
     if (b.kind === 'champion') { run.league.stage++; then = 'hallOfFame'; }
@@ -1880,7 +2055,7 @@ registerActions({
   nextAct: () => {
     const run = S.run;
     run.act++;
-    run.map = generateMap(run.act);
+    run.map = generateMap(run.act, run.seed);
     run.pos = null; run.visited = [];
     healParty(run);
     persistRun();
@@ -1898,12 +2073,26 @@ SCREENS.league = () => {
     ${img(trainerSpriteUrl(opp.info.sprite), 'trainer-art', opp.info.name)}
     <h2>${opp.title} ${esc(opp.info.name)}</h2>
     <p class="muted">${esc(opp.info.region)}${opp.info.type ? ' · ' + typeBadge(opp.info.type) : ''}</p>
-    <p>${stage < 4 ? 'There is no healing between Elite Four battles. Use your items wisely.' : 'This is the final battle. Win, and your team enters the Hall of Fame!'}</p>
+    <p>${stage < 4 ? 'There is no free healing between Elite Four battles. Use your items wisely.' : 'This is the final battle. Win, and your team enters the Hall of Fame!'}</p>
+    ${canLeagueHeal(run) ? `<div class="league-heal"><p class="small">The League nurse can restore your whole team (HP, PP and status${diffOf(run).permadeath ? '' : ', and fainted Pokémon'}) once before this battle. Each heal costs more than the last.</p>
+      <button data-act="leagueHeal" ${run.money < leagueHealPrice(run) ? 'disabled' : ''}>Full heal · $${leagueHealPrice(run).toLocaleString()}</button></div>` : ''}
     <div class="party-list">${run.party.map((m, i) => monCard(m, i)).join('')}</div>
     <div class="row gap center"><button data-act="openBag">Bag</button><button data-act="openTeam">Team</button><button class="primary big" data-act="challengeLeague">Challenge!</button></div>
   </section>`;
 };
 registerActions({
+  leagueHeal: () => {
+    const run = S.run;
+    if (!canLeagueHeal(run)) return;
+    const price = leagueHealPrice(run);
+    if (run.money < price) { sfx('error'); return; }
+    run.money -= price;
+    run.league.heals = (run.league.heals || 0) + 1;
+    run.league.healedAt = run.league.stage;
+    run.party.forEach(healPartyMon);
+    sfx('heal'); toast('Your team is fully healed.');
+    persistRun(); render();
+  },
   challengeLeague: () => {
     if (!S.run.party.some(m => m.hp > 0)) return;
     const spec = leagueOpponent(S.run).spec();

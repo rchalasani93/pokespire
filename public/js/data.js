@@ -6,13 +6,15 @@ export const TYPES = {};
 export const BY_NAME = {};
 export const ABILITIES = {};
 export const FORMS = {};
+/** Egg moves of each species that has them (the family's first stage). */
+export const EGG = {};
 /** TM / HM / tutor-compatible moves per species: MACHINES[id] = Set of move ids. */
 export const MACHINES = {};
 export const canLearnMachine = (id, move) => !!MACHINES[id]?.has(move);
 
 export async function loadData() {
-  const files = ['pokedex', 'moves', 'learnsets', 'types', 'abilities', 'forms', 'machines'];
-  const [dex, moves, learn, types, abilities, forms, machines] = await Promise.all(
+  const files = ['pokedex', 'moves', 'learnsets', 'types', 'abilities', 'forms', 'machines', 'eggmoves'];
+  const [dex, moves, learn, types, abilities, forms, machines, eggs] = await Promise.all(
     files.map(f => fetch(new URL(`data/${f}.json`, document.baseURI)).then(r => {
       if (!r.ok) throw new Error(`Failed to load ${f}.json`);
       return r.json();
@@ -24,6 +26,7 @@ export async function loadData() {
   Object.assign(TYPES, types);
   Object.assign(ABILITIES, abilities);
   Object.assign(FORMS, forms);
+  Object.assign(EGG, eggs);
   loadMachines(machines);
   for (const [id, s] of Object.entries(DEX)) {
     s.id = +id;
@@ -103,3 +106,9 @@ export function familyRoot(id) {
 }
 
 export const bst = id => DEX[id].b.reduce((a, b) => a + b, 0);
+
+/** Egg moves a starter can begin with: its family's first stage's egg moves (or its own). */
+export function eggMovesFor(id) {
+  const list = EGG[familyRoot(id)] || EGG[id] || [];
+  return list.filter(m => MOVES[m]);
+}

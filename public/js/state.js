@@ -16,6 +16,7 @@ export function defaultProfile() {
     caught: [],
     hallOfFame: [],
     shinies: [],   // species caught as shinies (always also in caught)
+    seen: [],      // species met in battle or offered at a Poké Ball node
     dex: {},       // per evolution family: natures (n) and ability slots (a) caught
     stats: { runs: 0, champions: 0, caught: 0 },
   };
@@ -31,6 +32,7 @@ export function normalizeProfile(p) {
     hallOfFame: Array.isArray(p.hallOfFame) ? p.hallOfFame : [],
     dex: p.dex && typeof p.dex === 'object' ? p.dex : {},
     shinies: Array.isArray(p.shinies) ? p.shinies : [],
+    seen: Array.isArray(p.seen) ? p.seen.filter(Number.isInteger) : [],
     stats: { ...d.stats, ...(p.stats || {}) },
   };
   // A shiny catch also counts as catching the species

@@ -128,6 +128,30 @@ Object.assign(api, {
   },
 });
 
+// ---------- Feedback and bug reports ----------
+export const FEEDBACK_KINDS = { bug: 'Bug or something broken', pokemon: 'Wrong Pokémon data', balance: 'Balance', idea: 'Suggestion', other: 'Other' };
+Object.assign(api, {
+  async sendFeedback({ kind, message, context }) {
+    const text = String(message || '').trim();
+    if (!FEEDBACK_KINDS[kind]) throw new ApiError('Pick a type of feedback.');
+    if (text.length < 10 || text.length > 2000) throw new ApiError('Please write between 10 and 2,000 characters.');
+    await currentUserId();
+    const { error } = await sb.from('feedback').insert({ kind, message: text, context: String(context || '').slice(0, 120) });
+    if (error && /rate limit/i.test(error.message || '')) throw new ApiError('You have sent a lot of reports recently. Please try again in an hour.', 429);
+    if (error && /relation .*feedback|PGRST205/i.test(`${error.message} ${error.code}`)) throw new ApiError('Feedback isn\'t set up on the server yet.', 503);
+    fail(error);
+  },
+  async adminFeedback() {
+    const { data, error } = await sb.rpc('admin_feedback', { lim: 100 });
+    fail(error);
+    return data || [];
+  },
+  async setFeedbackStatus(id, status) {
+    const { error } = await sb.rpc('admin_set_feedback_status', { fid: id, new_status: status });
+    fail(error);
+  },
+});
+
 // ---------- Who's online (Supabase Realtime presence) ----------
 let presence = null;
 export function joinPresence(user, onChange) {

@@ -271,15 +271,43 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
 .map svg { position: absolute; inset: 0; }
 .map line { stroke: #b9c7dd55; stroke-width: 2; stroke-dasharray: 5 6; }
 .map line.walked { stroke: var(--accent2); stroke-dasharray: none; stroke-width: 3; }
-.node { position: absolute; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; padding: 0; font-size: 21px;
-  background: #1b2a42; border: 2px solid #5b6f93; display: grid; place-items: center; z-index: 2; box-shadow: 0 3px 8px #0007; }
-.node:disabled { opacity: .55; }
-.node.visited { background: #3a4f3a; border-color: #7fbf7f; opacity: .9; }
-.node.current { box-shadow: 0 0 0 4px #ffcb0577; opacity: 1; }
-.node.available { opacity: 1; border-color: var(--accent2); animation: pulse 1.4s infinite; cursor: pointer; }
-@media (hover: hover) { .node.available:hover { transform: translate(-50%, -50%) scale(1.15); } }
-.node.boss { width: 66px; height: 66px; font-size: 30px; border-color: #ff6a47; background: #3b1f2a; }
+.node { position: absolute; transform: translate(-50%, -50%); width: 66px; height: 62px; border-radius: 6px; padding: 2px 2px 3px;
+  background: #16233a; border: 2px solid #5b6f93; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; z-index: 2; }
+.node b { font-size: .6rem; font-weight: 600; line-height: 1.05; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.node-art { position: relative; display: grid; place-items: center; width: 40px; height: 40px; flex: none; }
+.node-art img { max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: pixelated; }
+.node-art.trainer img { height: 40px; width: auto; max-width: none; }
+.node-art.mon img { width: 48px; height: 48px; max-width: none; max-height: none; margin: -4px; }
+.node-art i { display: none; font-style: normal; font-size: 22px; }
+.node-art.broken img { display: none; }
+.node-art.broken i { display: block; }
+.node:disabled { opacity: .5; }
+.node.visited { background: #233a2b; border-color: #6fae79; opacity: .85; }
+.node.current { outline: 3px solid var(--accent2); outline-offset: 2px; opacity: 1; }
+.node.available { opacity: 1; border-color: var(--accent2); background: #22344f; animation: pulse 1.4s infinite; cursor: pointer; }
+@media (hover: hover) { .node.available:hover { background: #2c4366; } }
+.node.wild { border-color: #5f9f6e; } .node.trainer, .node.villain { border-color: #b46a6a; } .node.recruit { border-color: #c45a5a; }
+.node.mart, .node.center, .node.tutor { border-color: #4f86c6; } .node.elite { border-color: #c9a44a; }
+.node.gym, .node.villainBoss { border-color: #ff6a47; }
+.node.boss { width: 84px; height: 80px; border-width: 3px; border-color: #ff6a47; background: #3b1f2a; }
+.node.boss .node-art { width: 56px; height: 56px; }
+.node.boss .node-art.trainer img { height: 56px; }
 .node.legendary { border-color: #d7b8ff; }
+.node.available.wild, .node.available.trainer, .node.available.villain, .node.available.recruit, .node.available.mart, .node.available.center,
+.node.available.tutor, .node.available.elite, .node.available.gym, .node.available.villainBoss, .node.available.legendary { border-color: var(--accent2); }
+@media (max-width: 640px) {
+  .node { width: 46px; height: 46px; padding: 2px; }
+  .node b { display: none; }
+  .node-art { width: 36px; height: 36px; }
+  .node-art.trainer img { height: 36px; }
+  .node.boss { width: 62px; height: 62px; }
+  .node.boss .node-art, .node.boss .node-art.trainer img { width: auto; height: 50px; }
+}
+.legend .node-art { width: 24px; height: 24px; vertical-align: middle; display: inline-grid; }
+.legend .node-art.trainer img { height: 24px; }
+.legend .node-art.mon img { width: 30px; height: 30px; margin: -3px; }
+.legend .node-art i { font-size: 15px; }
+.legend span { display: inline-flex; align-items: center; gap: 4px; }
 @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 #ffcb0599; } 50% { box-shadow: 0 0 0 8px #ffcb0500; } }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: .8rem; color: var(--muted); }
 .side { position: sticky; top: 74px; }
@@ -541,3 +569,60 @@ main { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
 @media (max-width: 520px) { .tutor-move { flex-direction: column; align-items: stretch; } }
 .learn-actions.yn { grid-template-columns: 1fr 1fr; }
 .learn-actions.yn button { min-height: 0; padding: 12px; font-size: 1rem; }
+
+/* Poké Ball node */
+.recruit-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin: 14px 0; }
+.recruit-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 10px; border-radius: 6px; text-align: center; border-width: 2px; }
+.recruit-card .recruit-art { width: 120px; height: 120px; object-fit: contain; }
+.recruit-card .rarity-tag { align-self: flex-start; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border: 1px solid currentColor; border-radius: 3px; }
+.recruit-card.rarity-common { border-color: var(--line); }
+.recruit-card.rarity-common .rarity-tag { color: var(--muted); }
+.recruit-card.rarity-uncommon { border-color: #4f86c6; }
+.recruit-card.rarity-uncommon .rarity-tag { color: #8db8ea; }
+.recruit-card.rarity-rare { border-color: var(--accent2); }
+.recruit-card.rarity-rare .rarity-tag { color: var(--accent2); }
+.recruit-card.rarity-veryRare { border-color: var(--accent); }
+.recruit-card.rarity-veryRare .rarity-tag { color: #ff8a70; }
+table.odds { border-collapse: collapse; margin: 6px 0; font-size: .85rem; }
+table.odds caption { text-align: left; color: var(--muted); padding-bottom: 4px; }
+table.odds th, table.odds td { border: 1px solid var(--line); padding: 3px 10px; text-align: center; }
+table.odds th { font-weight: 600; }
+
+/* Map seed */
+.seed-line { margin: -4px 0 8px; }
+.seed-line code { font-family: ui-monospace, Consolas, monospace; letter-spacing: .06em; padding: 1px 5px; border: 1px solid var(--line); border-radius: 3px; color: var(--text); }
+.seed-pick { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 8px; margin-top: 10px; }
+.seed-pick input { font-family: ui-monospace, Consolas, monospace; text-transform: uppercase; width: 12em; }
+
+/* League heal */
+.league-heal { border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; margin: 8px auto; max-width: 520px; }
+.league-heal p { margin: 0 0 6px; }
+
+/* Pokédex: seen but not caught */
+.dex-entry.seen .dex-sprite { opacity: .75; }
+.dex-entry.seen strong { color: var(--muted); }
+.seen-mark { font-size: .7rem; color: var(--muted); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; margin-top: 2px; }
+
+/* Feedback */
+.feedback-form { display: grid; gap: 10px; }
+.feedback-form textarea { width: 100%; min-height: 140px; resize: vertical; font: inherit; color: inherit; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.feedback-list { display: grid; gap: 8px; max-height: 55vh; overflow: auto; }
+.feedback-item { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.feedback-item p { margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
+.feedback-item.resolved { opacity: .6; }
+.bad-text { color: var(--bad); }
+
+/* Stat stage changes under the HP bar */
+.stage-line { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px 0 1px; min-height: 0; }
+.stage { font-size: .66rem; font-weight: 700; padding: 0 5px; border-radius: 3px; border: 1px solid; line-height: 1.5; }
+.stage.up { color: #1d6b36; border-color: #3f9a5a; background: #e3f4e7; }
+.stage.down { color: #9b2c2c; border-color: #cf5c5c; background: #fbe6e6; }
+
+/* Starter egg moves */
+.egg-picker { text-align: left; margin-top: 8px; }
+.egg-moves { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 6px 0; }
+.egg-move { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 6px 9px; border-radius: 6px; border-left: 4px solid var(--tc); }
+.egg-move small { color: var(--muted); font-size: .72rem; }
+.egg-move.on { background: #2c4366; border-color: var(--accent2); border-left-color: var(--tc); }
+.egg-move.on strong::after { content: ' ✓'; color: var(--accent2); }
+.move-chip.egg small { color: var(--accent2); }

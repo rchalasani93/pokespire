@@ -165,9 +165,13 @@ export function startBattle(run, spec) {
 // ---------- View snapshots for the UI ----------
 const sideMon = (run, side) => side === 'p' ? run.party[run.battle.pi] : run.battle.enemy[run.battle.ei];
 const oppSide = side => (side === 'p' ? 'e' : 'p');
-function snap(mon) {
+function snap(mon, vol) {
   if (!mon) return null;
   const v = { uid: mon.uid, id: mon.id, name: monName(mon), lv: mon.lv, hp: mon.hp, max: maxHp(mon), st: mon.st, shiny: mon.shiny, t: typesOf(mon) };
+  // Stat stage changes (only the ones that aren't 0), plus confusion
+  const stg = Object.entries(vol?.stg || {}).filter(([, n]) => n);
+  if (stg.length) v.stg = Object.fromEntries(stg);
+  if (vol?.conf > 0) v.conf = true;
   if (mon.bf) Object.assign(v, { form: mon.bf.n || null, s: mon.bf.gs || mon.bf.s || null, dmax: !!mon.bf.dmax, gmax: !!mon.bf.gmax, tera: mon.bf.tera || null });
   return v;
 }
@@ -1046,5 +1050,5 @@ function awardExp(run, out, defeated) {
 
 export function battleView(run) {
   const b = run.battle;
-  return { p: snap(sideMon(run, 'p')), e: snap(sideMon(run, 'e')), weather: b?.weather?.kind || null, terrain: b?.terrain?.kind || null };
+  return { p: snap(sideMon(run, 'p'), b?.pv), e: snap(sideMon(run, 'e'), b?.ev), weather: b?.weather?.kind || null, terrain: b?.terrain?.kind || null };
 }

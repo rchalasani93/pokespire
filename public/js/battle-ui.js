@@ -103,6 +103,7 @@ function battleScreen() {
       <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} ${E ? caughtMark(E.id, { real: true }) : ''}</strong><span>Lv ${E?.lv}</span></div>
       <div class="hud-types">${E ? (E.t || DEX[E.id].t).map(typeBadge).join('') : ''}${formTag(E)}</div>
       ${E ? hpBar(E.hp, E.max) : ''}
+      ${stageLine(E)}
       <div class="row small status-line"><span>${statusTag(E?.st)}${b.enemy[b.ei]?.elite ? '<span class="elite-tag">ELITE</span>' : ''}</span>${enemyBalls}</div>
     </div>
     <div class="wallet-chip">$${run.money.toLocaleString()} · ${(run.score || 0).toLocaleString()} pts</div>
@@ -119,6 +120,7 @@ function battleScreen() {
       <div class="row"><strong>${esc(P?.name)}${P?.shiny ? ' ✦' : ''}</strong><span>Lv ${P?.lv}</span></div>
       <div class="hud-types">${P ? (P.t || DEX[P.id].t).map(typeBadge).join('') : ''}${formTag(P)}</div>
       ${P ? hpBar(P.hp, P.max) : ''}
+      ${stageLine(P)}
       <div class="row small status-line"><span>${statusTag(P?.st)}</span><span>${P?.hp}/${P?.max}</span></div>
       <div class="expbar"><i style="width:${expPct}%"></i></div>
     </div>
@@ -161,9 +163,27 @@ document.addEventListener('error', e => {
   if (el?.tagName !== 'IMG') return;
   const how = el.dataset.onerror;
   if (how === 'hide') el.style.visibility = 'hidden';
+  else if (how === 'fallback') el.parentElement?.classList.add('broken');
   else if (how === 'remove') el.remove();
   else if (how === 'next') nextSprite(el);
 }, true);
+// Stat stage changes under the HP bar, e.g. "Atk +2 ×2.0  Spe −1 ×0.67"
+const STAGE_SHORT = { atk: 'Atk', def: 'Def', spa: 'SpA', spd: 'SpD', spe: 'Spe', accuracy: 'Acc', evasion: 'Eva' };
+const STAGE_FULL = { atk: 'Attack', def: 'Defense', spa: 'Sp. Atk', spd: 'Sp. Def', spe: 'Speed', accuracy: 'Accuracy', evasion: 'Evasion' };
+const stageMultiplier = (k, n) => {
+  const base = k === 'accuracy' || k === 'evasion' ? 3 : 2;
+  return n >= 0 ? (base + n) / base : base / (base - n);
+};
+function stageLine(v) {
+  if (!v || (!v.stg && !v.conf)) return '';
+  const chips = Object.entries(v.stg || {}).filter(([k, n]) => STAGE_SHORT[k] && Number.isInteger(n) && n).map(([k, n]) => {
+    const mult = stageMultiplier(k, n);
+    const sign = n > 0 ? '+' : '−';
+    return `<span class="stage ${n > 0 ? 'up' : 'down'}" title="${STAGE_FULL[k]} ${sign}${Math.abs(n)} (×${mult.toFixed(2).replace(/0$/, '')})">${STAGE_SHORT[k]} ${sign}${Math.abs(n)}</span>`;
+  });
+  if (v.conf) chips.push('<span class="stage down" title="Confused">Confused</span>');
+  return `<div class="stage-line">${chips.join('')}</div>`;
+}
 const WEATHER_LABEL = { sun: '☀️ Harsh sunlight', rain: '🌧️ Rain', sand: '🌪️ Sandstorm', snow: '❄️ Snow' };
 const TERRAIN_LABEL = { electric: '⚡ Electric Terrain', grassy: '🌿 Grassy Terrain', psychic: '🔮 Psychic Terrain', misty: '🌫️ Misty Terrain' };
 function fieldChip(v) {
