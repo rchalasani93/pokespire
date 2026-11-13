@@ -11,7 +11,7 @@
   },
   "license": "UNLICENSED",
   "devDependencies": {
-    "@pkmn/dex": "^0.10.15",
+    "@pkmn/dex": "^0.11.0",
     "@supabase/supabase-js": "^2.119.0",
     "esbuild": "^0.28.2",
     "javascript-obfuscator": "^5.10.1"
