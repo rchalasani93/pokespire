@@ -30,6 +30,7 @@ const pokedex = {};
 const learnsets = {};
 const usedMoves = new Set();
 const machine = {}; // TM / HM / tutor-compatible moves per species (any generation)
+const eggMoves = {}; // egg moves per species, from the most recent generation that has them
 const okMove = id => { const m = Dex.moves.get(id); return m.exists && !m.isZ && !m.isMax && !['CAP', 'LGPE', 'Custom', 'Gigantamax'].includes(m.isNonstandard); };
 
 for (const s of base) {
@@ -51,6 +52,13 @@ for (const s of base) {
   const tm = Object.entries(ls || {}).filter(([mv, src]) => src.some(x => /^\d[MT]$/.test(x)) && okMove(mv)).map(([mv]) => mv);
   tm.forEach(m => usedMoves.add(m));
   machine[s.num] = tm;
+  const eggByGen = {};
+  for (const [move, sources] of Object.entries(ls || {})) {
+    for (const src of sources) { const m = /^(\d)E$/.exec(src); if (m && okMove(move)) (eggByGen[m[1]] ||= []).push(move); }
+  }
+  const eggGen = Math.max(0, ...Object.keys(eggByGen).map(Number));
+  // Only moves the game already uses elsewhere, so every egg move works in battle
+  if (eggGen) eggMoves[s.num] = [...new Set(eggByGen[eggGen])].sort();
 
   const evos = (s.evos || []).map(n => byName[n]).filter(Boolean).map(e => {
     const evo = { to: e.num };
@@ -195,6 +203,7 @@ writeFileSync('public/data/machines.json', JSON.stringify({ moves: tmMoves, s: t
 writeFileSync('public/data/pokedex.json', JSON.stringify(pokedex));
 writeFileSync('public/data/moves.json', JSON.stringify(moves));
 writeFileSync('public/data/learnsets.json', JSON.stringify(learnsets));
+writeFileSync('public/data/eggmoves.json', JSON.stringify(Object.fromEntries(Object.entries(eggMoves).map(([k, v]) => [k, v.filter(m => moves[m])]).filter(([, v]) => v.length))));
 writeFileSync('public/data/types.json', JSON.stringify(typeChart));
 writeFileSync('public/data/abilities.json', JSON.stringify(abilities));
 console.log('species', Object.keys(pokedex).length, 'moves', Object.keys(moves).length);

@@ -1,5 +1,5 @@
 // Run structure: three acts of branching map nodes, encounters, rewards and progression.
-import { DEX, MOVES, FORMS, MACHINES, REGIONS, idOf, movesAtLevel, regionOf } from './data.js';
+import { DEX, MOVES, FORMS, MACHINES, REGIONS, idOf, movesAtLevel, regionOf, familyRoot, eggMovesFor } from './data.js';
 import { createMon, stageForLevel, healMon, rand, pick, uid, maxHp, expForLevel, evoItemFor, starterMoves } from './mechanics.js';
 import {
   ITEMS, DIFFICULTIES, diffOf, CLASSIC, GAME_MODES, modeOf, TRAINER_CLASSES, TRAINER_NAMES, GYM_LEADERS, VILLAINS, ELITE_FOUR, CHAMPIONS, STONE_LIST, EVO_ITEM_LIST,
@@ -8,8 +8,9 @@ import {
 
 export const ACTS = [
   { name: 'Act I · Route of Beginnings', from: 3, to: 14, boss: 'gym', bossLv: 16 },
-  { name: 'Act II · The Shadow Syndicate', from: 15, to: 27, boss: 'villainBoss', bossLv: 30 },
-  { name: 'Act III · Victory Road', from: 28, to: 39, boss: 'league', bossLv: 41 },
+  { name: 'Act II · The Shadow Syndicate', from: 15, to: 27, boss: 'gym', bossLv: 30 },
+  // Act III ends with a Gym Leader, then the Elite Four and the Champion
+  { name: 'Act III · Victory Road', from: 28, to: 39, boss: 'gymLeague', bossLv: 41 },
 ];
 export const ROWS = 12; // rows 0..10 are regular, row 11 is the boss
 const COLS = 7;
@@ -20,13 +21,39 @@ export const NODE_INFO = {
   villain: { icon: '💀', label: 'Villain Team', desc: 'Grunts or admins of an evil team block the way.' },
   elite: { icon: '⭐', label: 'Elite Pokémon', desc: 'A powerful wild Pokémon with superior stats. Rare rewards.' },
   gym: { icon: '🏅', label: 'Gym Battle', desc: 'A Gym Leader from any region. Win a badge.' },
+  villainBoss: { icon: '☠️', label: 'Villain Boss', desc: 'The villain team\'s leader. Beat them for a big reward.' },
   legendary: { icon: '✨', label: 'Legendary Pokémon', desc: 'A Legendary Pokémon appears! Your chance to catch it.' },
   tutor: { icon: '📖', label: 'Move Tutor', desc: 'Teach new moves for a fee, or relearn old ones for free.' },
   stop: { icon: '📖', label: 'Move Tutor', desc: 'Teach new moves for a fee, or relearn old ones for free.' }, // old saves
   mart: { icon: '🏪', label: 'PokéMart', desc: 'Buy Poké Balls, medicine and evolution items.' },
   center: { icon: '🏥', label: 'Pokémon Center', desc: 'Fully heal your team and use the PC Box.' },
+  recruit: { icon: '🔴', label: 'Poké Ball', desc: 'Three Pokémon are offered. Recruit one of them.' },
   boss: { icon: '👑', label: 'Boss', desc: 'The act boss.' },
 };
+
+// ---------- Map seeds ----------
+// A seed fixes each act's map layout and node types, so a route can be shared or replayed.
+// Battles, offers and rewards stay random.
+export const SEED_RE = /^[A-Z0-9-]{1,16}$/;
+export function normalizeSeed(s) {
+  const v = String(s ?? '').trim().toUpperCase();
+  return SEED_RE.test(v) ? v : null;
+}
+export const randomSeed = () => Math.floor(Math.random() * 36 ** 6).toString(36).toUpperCase().padStart(6, '0');
+export const dailySeed = (d = new Date()) => `D-${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}${String(d.getUTCDate()).padStart(2, '0')}`;
+/** Small deterministic generator (mulberry32) seeded from a string. */
+export function seededRng(str) {
+  let h = 1779033703 ^ str.length;
+  for (const c of str) { h = Math.imul(h ^ c.charCodeAt(0), 3432918353); h = (h << 13) | (h >>> 19); }
+  let a = h >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 // ---------- Species pools ----------
 let pools = null;
@@ -53,18 +80,36 @@ export function rowLevel(act, row) {
 }
 
 // ---------- New run ----------
+/** A starter's moves: the egg moves picked (up to 4), then its usual Lv 5 moves in the free slots. */
+export function starterMoveset(id, picked = []) {
+  const pool = new Set(eggMovesFor(id));
+  const chosen = [...new Set((Array.isArray(picked) ? picked : []).filter(m => pool.has(m) && MOVES[m]))].slice(0, 4);
+  // Free slots keep the usual moves, attacking ones first and the most recently learned first
+  const usual = starterMoves(id, 5);
+  const base = usual.filter(m => !chosen.includes(m));
+  const fill = chosen.length ? [...base].reverse().sort((x, y) => (MOVES[x].c === 'S') - (MOVES[y].c === 'S')) : base;
+  const out = [...chosen, ...fill].slice(0, 4);
+  // Never start without an attacking move
+  if (!out.some(m => MOVES[m].c !== 'S')) {
+    const atk = base.find(m => MOVES[m].c !== 'S') || movesAtLevel(id, 5).find(m => MOVES[m]?.c !== 'S');
+    if (atk) out[Math.min(out.length, 3)] = atk;
+  }
+  return out;
+}
+
 export function newRun(starterId, difficulty = 'medium', mode = 'classic', choice = {}) {
-  const starter = createMon(starterId, 5, { moves: starterMoves(starterId, 5) });
+  const starter = createMon(starterId, 5, { moves: starterMoveset(starterId, choice.moves) });
   starter.fr = 70;
   if (Number.isInteger(choice.nat) && choice.nat >= 0 && choice.nat < 25) starter.nat = choice.nat;
   if (choice.ab && [...DEX[starterId].a, DEX[starterId].h].includes(choice.ab)) starter.ab = choice.ab;
   if (choice.shiny) starter.shiny = true;
   starter.hp = maxHp(starter);
   const diff = DIFFICULTIES[difficulty] ? difficulty : 'medium';
+  const seed = normalizeSeed(choice.seed) || randomSeed();
   const run = {
     v: 1, id: uid(), startedAt: new Date().toISOString(), starter: starterId, difficulty: diff,
-    mode: GAME_MODES[mode] ? mode : 'classic', region: regionOf(starterId),
-    act: 1, map: generateMap(1), pos: null, visited: [],
+    mode: GAME_MODES[mode] ? mode : 'classic', region: regionOf(starterId), seed,
+    act: 1, map: generateMap(1, seed), pos: null, visited: [],
     party: [starter], box: [], bag: { ...DIFFICULTIES[diff].bag }, money: 100, fallen: [],
     badges: [], beatenGyms: [], caught: [], league: null, battle: null, node: null,
     stats: { battles: 0, wins: 0, caught: 0, nodes: 0 }, score: 0,
@@ -73,7 +118,10 @@ export function newRun(starterId, difficulty = 'medium', mode = 'classic', choic
 }
 
 // ---------- Map generation (branching paths, Slay-the-Spire style) ----------
-export function generateMap(act) {
+export function generateMap(act, seed = null) {
+  const rng = seed ? seededRng(`${seed}|${act}`) : Math.random;
+  const rand = n => Math.floor(rng() * n);
+  const pick = arr => arr[rand(arr.length)];
   const nodes = {};
   const key = (r, c) => `${r}-${c}`;
   const edges = new Set();
@@ -101,8 +149,8 @@ export function generateMap(act) {
   for (const n of Object.values(nodes)) for (const b of n.next) (parents[b] ||= []).push(n.id);
   const ordered = Object.values(nodes).filter(n => n.id !== 'boss').sort((a, b) => a.r - b.r);
   const weights = r => ({
-    wild: 28, trainer: 20, villain: act >= 2 ? 12 : 8, elite: r >= 3 ? 7 : 0, gym: r >= 3 ? 6 : 0,
-    tutor: 9, mart: r >= 2 ? 7 : 3, center: r >= 3 && r <= 8 ? 7 : 0,
+    wild: 24, trainer: 20, villain: act >= 2 ? 12 : 8, elite: r >= 3 ? 7 : 0, gym: r >= 3 ? 6 : 0,
+    tutor: 9, mart: r >= 2 ? 7 : 3, center: r >= 3 && r <= 8 ? 7 : 0, recruit: act === 1 ? 9 : 7,
   });
   let gyms = 0;
   for (const n of ordered) {
@@ -111,9 +159,9 @@ export function generateMap(act) {
     for (let tries = 0; tries < 20; tries++) {
       const w = weights(n.r);
       if (gyms >= 2) w.gym = 0;
-      const t = weighted(w);
+      const t = weighted(w, rng);
       const parentTypes = (parents[n.id] || []).map(p => nodes[p].type);
-      if (['tutor', 'mart', 'center', 'gym', 'elite'].includes(t) && parentTypes.includes(t)) continue;
+      if (['tutor', 'mart', 'center', 'gym', 'elite', 'recruit'].includes(t) && parentTypes.includes(t)) continue;
       n.type = t;
       break;
     }
@@ -123,12 +171,19 @@ export function generateMap(act) {
   // Exactly one Legendary encounter per act, in the middle rows
   const mid = ordered.filter(n => n.r >= 4 && n.r <= 8 && n.type !== 'gym');
   if (mid.length) pick(mid).type = 'legendary';
+  // Act II: the villain team's boss waits on the later floors (every act now ends with a Gym Leader)
+  if (act === 2) {
+    const late = ordered.filter(n => n.r >= 6 && n.r <= 9 && !['gym', 'legendary', 'center'].includes(n.type));
+    const villains = late.filter(n => n.type === 'villain');
+    const spot = villains.length ? pick(villains) : late.length ? pick(late) : null;
+    if (spot) spot.type = 'villainBoss';
+  }
   return { act, nodes };
 }
 
-function weighted(w) {
+function weighted(w, rng = Math.random) {
   const entries = Object.entries(w).filter(([, v]) => v > 0);
-  let x = Math.random() * entries.reduce((a, [, v]) => a + v, 0);
+  let x = rng() * entries.reduce((a, [, v]) => a + v, 0);
   for (const [k, v] of entries) { if ((x -= v) < 0) return k; }
   return entries[0][0];
 }
@@ -247,6 +302,7 @@ export function buildEncounter(run, node) {
       const enemy = bossTeam(run, leader.team, size, lv + 1, 3, { perfectIvs: act });
       return gymSpec(leader, enemy);
     }
+    case 'villainBoss': return villainBossEncounter(run, lv + 3);
     case 'boss': return bossEncounter(run);
   }
   return null;
@@ -270,21 +326,43 @@ function gymSpec(leader, enemy) {
   };
 }
 
+/** The villain team's boss: ace at `aceLv`. */
+export function villainBossEncounter(run, aceLv) {
+  const v = pickVillain(run);
+  const enemy = bossTeam(run, v.boss.team, 4, aceLv - 3, 3, { perfectIvs: 3 });
+  return {
+    kind: 'villainBoss', enemy, ai: 2, fullRestores: 1,
+    trainer: { name: v.boss.name, title: v.boss.title, sprite: v.boss.sprite, prize: 40 * aceLv, quote: 'This is not the end...', team: v.team },
+  };
+}
+
+/** Every act ends with a Gym Leader; bigger teams in later acts. */
 export function bossEncounter(run) {
   const a = ACTS[run.act - 1];
-  if (a.boss === 'gym') {
-    const leader = pickGym(run);
-    return gymSpec(leader, bossTeam(run, leader.team, 3, a.bossLv - 3, 3, { perfectIvs: 2 }));
-  }
-  if (a.boss === 'villainBoss') {
-    const v = pickVillain(run);
-    const enemy = bossTeam(run, v.boss.team, 4, a.bossLv - 3, 3, { perfectIvs: 3 });
-    return {
-      kind: 'villainBoss', enemy, ai: 2, fullRestores: 1,
-      trainer: { name: v.boss.name, title: v.boss.title, sprite: v.boss.sprite, prize: 40 * a.bossLv, quote: 'This is not the end...', team: v.team },
-    };
-  }
-  return null; // league is handled separately
+  if (a.boss === 'villainBoss') return villainBossEncounter(run, a.bossLv); // runs saved before every act ended with a Gym
+  const leader = pickGym(run);
+  const size = run.act === 1 ? 3 : run.act === 2 ? 4 : 5;
+  return gymSpec(leader, bossTeam(run, leader.team, size, a.bossLv - 3, 3, { perfectIvs: run.act + 1 }));
+}
+/** The Gym Leader who'll be faced next (Classic: the region's next Gym; Randomized: decided at the battle). */
+export function nextGymLeader(run) {
+  return isClassic(run) ? pickGym(run) : null;
+}
+
+// ---------- Map node art (sprites instead of emoji, like PokéRez) ----------
+const ITEM_ART = { wild: 'revival-herb', elite: 'star-piece', legendary: 'master-ball', tutor: 'tm-normal', stop: 'tm-normal', recruit: 'poke-ball' };
+const MON_ART = { mart: 52, center: 113 }; // Meowth runs the shop, Chansey the Pokémon Center
+/** What a map node shows: { item | mon | trainer } plus a name for its sprite. */
+export function nodeArt(run, node) {
+  const t = node.type;
+  if (ITEM_ART[t]) return { kind: 'item', name: ITEM_ART[t] };
+  if (MON_ART[t]) return { kind: 'mon', id: MON_ART[t] };
+  if (t === 'trainer') return { kind: 'trainer', name: 'youngster' };
+  const villain = isClassic(run) ? VILLAINS.find(v => v.team === classicOf(run).villains[0]) : null;
+  if (t === 'villain') return { kind: 'trainer', name: villain?.grunt || 'rocketgrunt' };
+  if (t === 'villainBoss') return { kind: 'trainer', name: villain?.boss.sprite || 'giovanni' };
+  if (t === 'gym' || t === 'boss') return { kind: 'trainer', name: nextGymLeader(run)?.sprite || 'acetrainer' };
+  return { kind: 'item', name: 'poke-ball' };
 }
 
 // ---------- Pokémon League (Act III boss) ----------
@@ -570,6 +648,68 @@ export function storeCaught(run, mon) {
   if (!run.caught.includes(mon.id)) run.caught.push(mon.id);
   if (run.party.length < 6) { run.party.push(mon); return 'party'; }
   run.box.push(mon); return 'box';
+}
+
+// ---------- Poké Ball node: recruit one of three Pokémon ----------
+// Rarity comes from the strongest form the family can evolve into, so Dratini is Very rare
+// and Caterpie is Common. Odds improve in later acts.
+export const RECRUIT_RARITIES = [
+  { key: 'common', name: 'Common', maxBst: 450 },
+  { key: 'uncommon', name: 'Uncommon', maxBst: 500 },
+  { key: 'rare', name: 'Rare', maxBst: 540 },
+  { key: 'veryRare', name: 'Very rare', maxBst: Infinity },
+];
+const RECRUIT_ODDS = { 1: [60, 28, 10, 2], 2: [45, 32, 17, 6], 3: [35, 32, 23, 10] };
+export const recruitOdds = act => RECRUIT_ODDS[act] || RECRUIT_ODDS[3];
+
+const finalBstCache = {};
+export function familyFinalBst(id, depth = 0) {
+  if (finalBstCache[id] != null) return finalBstCache[id];
+  const sp = DEX[id];
+  const own = sp.b.reduce((a, b) => a + b, 0);
+  const evos = depth < 4 ? (sp.e || []).map(e => e.to).filter(to => DEX[to]) : [];
+  const v = Math.max(own, ...evos.map(to => familyFinalBst(to, depth + 1)));
+  return (finalBstCache[id] = v);
+}
+export function recruitRarity(id) {
+  const b = familyFinalBst(id);
+  return RECRUIT_RARITIES.findIndex(r => b < r.maxBst);
+}
+let recruitBuckets = null;
+function getRecruitBuckets() {
+  if (recruitBuckets) return recruitBuckets;
+  recruitBuckets = RECRUIT_RARITIES.map(() => []);
+  for (const id of getPools().wildBase) recruitBuckets[recruitRarity(id)].push(id);
+  return recruitBuckets;
+}
+
+/** Three different species, none already on the team, at the node's level. */
+export function recruitOffers(run, node) {
+  const lv = Math.max(3, rowLevel(run.act, node.r) - 1);
+  const buckets = getRecruitBuckets();
+  const odds = recruitOdds(run.act);
+  const skip = new Set([...run.party.map(m => familyRoot(m.id))]);
+  const out = [];
+  for (let tries = 0; tries < 60 && out.length < 3; tries++) {
+    const ri = Number(weighted(Object.fromEntries(odds.map((w, i) => [i, buckets[i].length ? w : 0]))));
+    const id = pick(buckets[ri]);
+    const root = familyRoot(id);
+    if (skip.has(root)) continue;
+    skip.add(root);
+    const mon = makeTrainerMon(id, lv, { shinyOdds: WILD_SHINY_ODDS });
+    mon.fr = DEX[mon.id].bh;
+    mon.ball = 'Poké Ball';
+    out.push({ mon, rarity: RECRUIT_RARITIES[ri].key });
+  }
+  return out;
+}
+
+// ---------- Pokémon League: paid full heal between battles ----------
+/** Each heal costs more than the last. */
+export const leagueHealPrice = run => Math.round(1200 * ((run.league?.heals || 0) + 1) * diffOf(run).priceMult);
+export function canLeagueHeal(run) {
+  const L = run.league;
+  return !!L && L.stage >= 1 && L.stage <= 4 && L.healedAt !== L.stage;
 }
 
 export function partySummary(party) {
