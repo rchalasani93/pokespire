@@ -1,6 +1,6 @@
 // Accounts and saves, backed by Supabase (Auth + Postgres with row-level security).
 // Saves are debounced so rapid changes coalesce into one write.
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/+esm';
 
 const cfg = window.POKESPIRE_CONFIG || {};
 export const configured = Boolean(cfg.supabaseUrl && cfg.supabaseAnonKey && !cfg.supabaseUrl.includes('YOUR-PROJECT'));
