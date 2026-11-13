@@ -10,7 +10,7 @@ import {
   ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
   martStock, eliteReward, healParty, storeCaught, partySummary, addItem, applyDifficulty, priceOf, runRegion,
   generateRewards, rerollCost, TIER_COLORS, rewardShop, tutorOffers, tutorPrice,
-  recruitOffers, recruitOdds, RECRUIT_RARITIES, nextGymLeader, starterMoveset, nodeArt, leagueHealPrice, canLeagueHeal, normalizeSeed, dailySeed,
+  restOnMove, recruitOffers, recruitOdds, RECRUIT_RARITIES, nextGymLeader, starterMoveset, nodeArt, leagueHealPrice, canLeagueHeal, normalizeSeed, dailySeed,
 } from './game.js';
 import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl, HELD_KINDS, KEY_ITEMS } from './content.js';
 import { clearBattleForm, setBattleHooks } from './battle.js';
@@ -741,6 +741,7 @@ function visitNode(id) {
   run.visited.push(id);
   run.stats.nodes++;
   run.party.forEach(m => { if (m.hp > 0) m.fr = Math.min(255, m.fr + 1); }); // walking together builds friendship
+  if (restOnMove(run)) toast('Your team rested on the way: PP restored and 20% HP recovered.');
   if (node.type === 'boss' && run.league) { persistRun(); go('league'); return; }
   if (node.type === 'recruit') {
     run.node = { type: 'recruit', id, offers: recruitOffers(run, node) };

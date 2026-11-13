@@ -495,6 +495,21 @@ export function applyDifficulty(run, spec) {
 
 export function healParty(run) { run.party.forEach(healMon); }
 
+/** Moving to a new room: every move's PP is restored and each Pokémon still standing gets back 20% of its max HP.
+ *  Fainted Pokémon stay fainted. Returns true if anything was restored. */
+export const ROOM_HEAL = 0.2;
+export function restOnMove(run) {
+  let changed = false;
+  for (const m of run.party) {
+    for (const x of m.moves) { const full = MOVES[x.id]?.pp ?? x.pp; if (x.pp < full) { x.pp = full; changed = true; } }
+    if (m.hp <= 0) continue;
+    const max = maxHp(m);
+    const hp = Math.min(max, m.hp + Math.ceil(max * ROOM_HEAL));
+    if (hp !== m.hp) { m.hp = hp; changed = true; }
+  }
+  return changed;
+}
+
 // ---------- Opponents' held items and battle gimmicks ----------
 const BOSS_KINDS = ['gym', 'villainBoss', 'e4', 'champion'];
 const megaStoneOf = id => (FORMS[id]?.mega || []).find(f => f.kind === 'mega' && f.item)?.item || null;

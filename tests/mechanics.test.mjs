@@ -486,3 +486,24 @@ console.log('Gym boss, villain boss node, node art and egg move tests passed.');
   assert.equal(Bt.battleView(run).p.stg, undefined);
 }
 console.log('Battle stat stage view tests passed.');
+
+// Moving to a new room restores PP and 20% HP (fainted Pokémon stay fainted)
+{
+  const run = G.newRun(4, 'medium', 'classic');
+  const a = M.createMon(16, 30), b = M.createMon(19, 30);
+  run.party.push(a, b);
+  const max = M.maxHp(a);
+  a.hp = 1; a.moves.forEach(x => { x.pp = 0; });
+  b.hp = 0; b.moves.forEach(x => { x.pp = 0; });
+  run.party[0].hp = M.maxHp(run.party[0]);
+  assert.equal(G.restOnMove(run), true);
+  assert.equal(a.hp, Math.min(max, 1 + Math.ceil(max * 0.2)));
+  assert.ok(a.moves.every(x => x.pp === MOVES[x.id].pp));
+  assert.equal(b.hp, 0, 'fainted stays fainted');
+  assert.ok(b.moves.every(x => x.pp === MOVES[x.id].pp), 'PP restored even when fainted');
+  a.hp = max - 1;
+  G.restOnMove(run);
+  assert.equal(a.hp, max, 'never above max HP');
+  assert.equal(G.restOnMove(run), false, 'nothing to restore');
+}
+console.log('Room rest tests passed.');

@@ -79,6 +79,8 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Pokémon League.** There's no free healing between Elite Four battles. After each win you can pay the League nurse for one full heal before the next battle (HP, PP, status and fainted Pokémon; on Hell, fainted Pokémon are already gone). Each heal costs more than the last.
 
+**Resting between rooms.** Every time you move to a new node, your team's PP is fully restored and each Pokémon that hasn't fainted recovers 20% of its max HP. Fainted Pokémon still need a Revive or a Pokémon Center.
+
 If your whole team faints, the run ends. It's recorded in your history either way.
 
 **Feedback.** Players can report bugs, wrong Pokémon data, balance problems and ideas from the account menu (Send feedback). The report includes the screen they were on and the run's act, difficulty and seed. The database limits each player to 5 reports an hour and 20 a day. Admins read and resolve reports from the Admin panel (Player feedback); every status change is written to an admin log.
