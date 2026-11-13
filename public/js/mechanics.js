@@ -2,6 +2,14 @@
 // Formulas follow the main-series games (Gen 5+ where they differ).
 import { DEX, MOVES, movesAtLevel, movesLearnedAt } from './data.js';
 
+/** A chosen starter's moves: like the games, plus any moves its species learns on evolution. */
+export function starterMoves(id, lv) {
+  const evo = movesLearnedAt(id, 0).filter(m => MOVES[m]).slice(0, 4);
+  const rest = movesAtLevel(id, lv).filter(m => !evo.includes(m));
+  const out = [...evo, ...rest.slice(Math.max(0, rest.length - (4 - evo.length)))];
+  return out.some(m => MOVES[m].c !== 'S') ? out : movesAtLevel(id, lv);
+}
+
 export const STAT_KEYS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
 export const STAT_LABELS = ['HP', 'Attack', 'Defense', 'Sp. Atk', 'Sp. Def', 'Speed'];
 
@@ -13,6 +21,17 @@ export function natureMod(nature, statIdx) {
   const up = NATURE_STAT[Math.floor(nature / 5)], down = NATURE_STAT[nature % 5];
   if (up === down) return 1;
   return statIdx === up ? 1.1 : statIdx === down ? 0.9 : 1;
+}
+
+export const STAT_SHORT = ['HP', 'Atk', 'Def', 'SpA', 'SpD', 'Spe'];
+/** e.g. "Adamant (+Atk, −SpA)" or "Hardy (neutral)" */
+export function natureLabel(n) {
+  const up = NATURE_STAT[Math.floor(n / 5)], down = NATURE_STAT[n % 5];
+  return up === down ? `${NATURES[n]} (neutral)` : `${NATURES[n]} (+${STAT_SHORT[up]}, −${STAT_SHORT[down]})`;
+}
+/** The games' IV judge wording (Scarlet/Violet). */
+export function ivJudge(v) {
+  return v === 31 ? 'Best' : v === 30 ? 'Fantastic' : v >= 26 ? 'Very good' : v >= 16 ? 'Pretty good' : v >= 1 ? 'Decent' : 'No good';
 }
 
 export const rand = n => Math.floor(Math.random() * n);
@@ -50,14 +69,20 @@ export function expYield(defeated, receiverLevel, { trainer = false, share = fal
 
 // ---------- Stats ----------
 export function calcStats(mon) {
-  const base = DEX[mon.id].b;
+  // A battle form (Mega Evolution, Primal Reversion) brings its own base stats
+  const base = mon.bf?.b || DEX[mon.id].b;
   return base.map((b, i) => {
     const core = Math.floor((2 * b + mon.iv[i] + Math.floor(mon.ev[i] / 4)) * mon.lv / 100);
     if (i === 0) return mon.id === 292 ? 1 : core + mon.lv + 10; // Shedinja always has 1 HP
     return Math.floor((core + 5) * natureMod(mon.nat, i));
   });
 }
-export const maxHp = mon => calcStats(mon)[0];
+// Dynamax doubles HP (Dynamax Level 10)
+export const maxHp = mon => calcStats(mon)[0] * (mon.bf?.dmax ? 2 : 1);
+/** Types in battle: Terastallized Pokémon have only their Tera Type defensively. */
+export const typesOf = mon => (mon.bf?.tera ? [mon.bf.tera] : mon.bf?.t || DEX[mon.id].t);
+/** Tera Type: one of the species' own types unless changed with a Tera Shard. */
+export const teraType = mon => mon.tt || DEX[mon.id].t[0];
 
 export function addEvs(mon, defeatedId) {
   const y = DEX[defeatedId].ev;
@@ -79,6 +104,7 @@ export function createMon(id, lv, { perfectIvs = 0, moves = null, shinyOdds = 40
     uid: uid(), id, lv, exp: expForLevel(sp.gr, lv), nat: rand(25), iv, ev: [0, 0, 0, 0, 0, 0],
     st: null, sl: 0, fr: sp.bh, shiny: rand(shinyOdds) === 0,
     ab: Math.random() < 0.05 && sp.h ? sp.h : pick(sp.a),
+    tt: pick(sp.t),
     moves: (moves || movesAtLevel(id, lv)).map(m => ({ id: m, pp: MOVES[m].pp })),
   };
   mon.hp = maxHp(mon);

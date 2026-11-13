@@ -3,6 +3,7 @@
 // Usage: node scripts/build-data.mjs   (needs network for the PokeAPI CSVs)
 import { Dex } from '@pkmn/dex';
 import { writeFileSync, mkdirSync } from 'node:fs';
+import { orderLearnsets } from './learnset-order.mjs';
 
 const CSV = 'https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv/';
 async function csv(name) {
@@ -28,6 +29,9 @@ const byName = Object.fromEntries(base.map(s => [s.name, s]));
 const pokedex = {};
 const learnsets = {};
 const usedMoves = new Set();
+const machine = {}; // TM / HM / tutor-compatible moves per species (any generation)
+const eggMoves = {}; // egg moves per species, from the most recent generation that has them
+const okMove = id => { const m = Dex.moves.get(id); return m.exists && !m.isZ && !m.isMax && !['CAP', 'LGPE', 'Custom', 'Gigantamax'].includes(m.isNonstandard); };
 
 for (const s of base) {
   const c = speciesCsv[s.num] || {};
@@ -45,6 +49,16 @@ for (const s of base) {
   const list = (byGen[gen] || []).sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]));
   list.forEach(([, m]) => usedMoves.add(m));
   learnsets[s.num] = list;
+  const tm = Object.entries(ls || {}).filter(([mv, src]) => src.some(x => /^\d[MT]$/.test(x)) && okMove(mv)).map(([mv]) => mv);
+  tm.forEach(m => usedMoves.add(m));
+  machine[s.num] = tm;
+  const eggByGen = {};
+  for (const [move, sources] of Object.entries(ls || {})) {
+    for (const src of sources) { const m = /^(\d)E$/.exec(src); if (m && okMove(move)) (eggByGen[m[1]] ||= []).push(move); }
+  }
+  const eggGen = Math.max(0, ...Object.keys(eggByGen).map(Number));
+  // Only moves the game already uses elsewhere, so every egg move works in battle
+  if (eggGen) eggMoves[s.num] = [...new Set(eggByGen[eggGen])].sort();
 
   const evos = (s.evos || []).map(n => byName[n]).filter(Boolean).map(e => {
     const evo = { to: e.num };
@@ -114,12 +128,21 @@ for (const id of usedMoves) {
   }).filter(x => Object.keys(x).length > 1);
   if (sec.length) o.sec = sec;
   if (m.category !== 'Status' && !m.basePower && !m.damage && !m.ohko && !o.half) o.p = 60; // variable-power moves
+  // Z-Move and Max Move power, Z effects of status moves, weather/terrain setters, contact
+  if (m.category !== 'Status') { if (m.zMove?.basePower) o.z = m.zMove.basePower; if (m.maxMove?.basePower) o.mx = m.maxMove.basePower; }
+  else if (m.zMove?.boost) o.zb = m.zMove.boost;
+  else if (m.zMove?.effect) o.ze = m.zMove.effect;
+  if (m.weather) o.weather = { sunnyday: 'sun', raindance: 'rain', sandstorm: 'sand', snowscape: 'snow', hail: 'snow', chillyreception: 'snow' }[m.id] || null;
+  if (m.terrain) o.terrain = { electricterrain: 'electric', grassyterrain: 'grassy', psychicterrain: 'psychic', mistyterrain: 'misty' }[m.id] || null;
+  if (m.flags?.contact) o.ct = 1;
   o.d = m.shortDesc;
   moves[id] = o;
 }
 
 // Strip moves we never kept from learnsets
 for (const k of Object.keys(learnsets)) learnsets[k] = learnsets[k].filter(([, m]) => moves[m]);
+// Same-level moves in mainline order
+await orderLearnsets(learnsets);
 
 const typeChart = {};
 for (const atk of Dex.types.all()) {
@@ -134,9 +157,53 @@ for (const def of Dex.types.all()) {
   }
 }
 
+// Ability descriptions for every ability a kept species can have
+const abilities = {};
+for (const sp of Object.values(pokedex)) {
+  for (const name of [...sp.a, ...(sp.h ? [sp.h] : [])]) {
+    if (abilities[name]) continue;
+    const ab = Dex.abilities.get(name);
+    abilities[name] = ab.exists ? (ab.shortDesc || ab.desc || '') : '';
+  }
+}
+
+// Battle forms: Mega Evolution, Primal Reversion and Gigantamax (sprite ids are PokeAPI's)
+const pokeapiIds = Object.fromEntries((await csv('pokemon')).map(r => [r.identifier, +r.id]));
+const formSlug = name => name.toLowerCase().replace(/[^a-z0-9-]/g, '').replace(/--+/g, '-');
+const forms = {};
+for (const f of Dex.species.all()) {
+  if (f.isNonstandard === 'CAP' || !pokedex[f.num]) continue;
+  const megaLike = f.forme.startsWith('Mega') || f.forme === 'Primal';
+  if (megaLike) {
+    const entry = {
+      n: f.forme === 'Primal' ? `Primal ${f.baseSpecies}` : `Mega ${f.baseSpecies}${f.forme.replace(/^Mega/, '').replace('-', ' ')}`,
+      kind: f.forme === 'Primal' ? 'primal' : 'mega',
+      t: f.types, b: [f.baseStats.hp, f.baseStats.atk, f.baseStats.def, f.baseStats.spa, f.baseStats.spd, f.baseStats.spe],
+      ab: f.abilities[0], s: pokeapiIds[formSlug(f.name)] || null,
+    };
+    if (f.requiredItem) entry.item = f.requiredItem;
+    if (f.requiredMove) entry.move = Dex.moves.get(f.requiredMove).id;
+    if (!entry.item && !entry.move) continue;
+    ((forms[f.num] ||= {}).mega ||= []).push(entry);
+  }
+  if (f.forme === 'Gmax') {
+    const base = Dex.species.get(f.baseSpecies);
+    const mv = Dex.moves.get(base.canGigantamax);
+    (forms[f.num] ||= {}).gmax = { move: mv.name, mt: mv.type, s: pokeapiIds[formSlug(f.name)] || null };
+  }
+}
+
 mkdirSync('public/data', { recursive: true });
+writeFileSync('public/data/forms.json', JSON.stringify(forms));
+// TM/HM/tutor compatibility, packed as indexes into one move list
+const tmMoves = [...new Set(Object.values(machine).flat())].filter(m => moves[m]).sort();
+const tmIndex = Object.fromEntries(tmMoves.map((m, i) => [m, i.toString(36)]));
+const tmSpecies = Object.fromEntries(Object.entries(machine).map(([num, list]) => [num, list.filter(m => tmIndex[m]).map(m => tmIndex[m]).join(',')]));
+writeFileSync('public/data/machines.json', JSON.stringify({ moves: tmMoves, s: tmSpecies }));
 writeFileSync('public/data/pokedex.json', JSON.stringify(pokedex));
 writeFileSync('public/data/moves.json', JSON.stringify(moves));
 writeFileSync('public/data/learnsets.json', JSON.stringify(learnsets));
+writeFileSync('public/data/eggmoves.json', JSON.stringify(Object.fromEntries(Object.entries(eggMoves).map(([k, v]) => [k, v.filter(m => moves[m])]).filter(([, v]) => v.length))));
 writeFileSync('public/data/types.json', JSON.stringify(typeChart));
+writeFileSync('public/data/abilities.json', JSON.stringify(abilities));
 console.log('species', Object.keys(pokedex).length, 'moves', Object.keys(moves).length);

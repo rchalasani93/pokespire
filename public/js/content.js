@@ -1,35 +1,44 @@
 // Items, trainers, Gym Leaders, villain teams, Elite Four and Champions.
 
-// ---------- Items (prices follow the recent main-series games) ----------
+// ---------- Items (prices are a tenth of the main-series games; runs start with $100) ----------
 export const ITEMS = {
-  'Poké Ball': { kind: 'ball', price: 200, slug: 'poke-ball', desc: 'A device for catching wild Pokémon.' },
-  'Great Ball': { kind: 'ball', price: 600, slug: 'great-ball', desc: 'A good ball with a higher catch rate (×1.5).' },
-  'Ultra Ball': { kind: 'ball', price: 800, slug: 'ultra-ball', desc: 'A high-performance ball (×2).' },
-  'Quick Ball': { kind: 'ball', price: 1000, slug: 'quick-ball', desc: '×5 catch rate on the first turn of a battle.' },
-  'Dusk Ball': { kind: 'ball', price: 1000, slug: 'dusk-ball', desc: '×3 catch rate at night (uses your clock).' },
+  'Poké Ball': { kind: 'ball', price: 20, slug: 'poke-ball', desc: 'A device for catching wild Pokémon.' },
+  'Great Ball': { kind: 'ball', price: 60, slug: 'great-ball', desc: 'A good ball with a higher catch rate (×1.5).' },
+  'Ultra Ball': { kind: 'ball', price: 80, slug: 'ultra-ball', desc: 'A high-performance ball (×2).' },
+  'Quick Ball': { kind: 'ball', price: 100, slug: 'quick-ball', desc: '×5 catch rate on the first turn of a battle.' },
+  'Dusk Ball': { kind: 'ball', price: 100, slug: 'dusk-ball', desc: '×3 catch rate at night (uses your clock).' },
   'Master Ball': { kind: 'ball', price: 0, slug: 'master-ball', desc: 'Catches any wild Pokémon without fail.' },
 
-  'Potion': { kind: 'heal', amount: 20, price: 200, slug: 'potion', desc: 'Restores 20 HP.' },
-  'Super Potion': { kind: 'heal', amount: 60, price: 700, slug: 'super-potion', desc: 'Restores 60 HP.' },
-  'Hyper Potion': { kind: 'heal', amount: 120, price: 1500, slug: 'hyper-potion', desc: 'Restores 120 HP.' },
-  'Max Potion': { kind: 'heal', amount: 0, price: 2500, slug: 'max-potion', desc: 'Fully restores HP.' },
-  'Full Restore': { kind: 'heal', amount: 0, cure: true, price: 3000, slug: 'full-restore', desc: 'Fully restores HP and cures status.' },
-  'Revive': { kind: 'revive', price: 2000, slug: 'revive', desc: 'Revives a fainted Pokémon with half its HP.' },
-  'Max Revive': { kind: 'revive', full: true, price: 4000, slug: 'max-revive', desc: 'Revives a fainted Pokémon with full HP.' },
-  'Antidote': { kind: 'status', cures: ['psn', 'tox'], price: 100, slug: 'antidote', desc: 'Cures poison.' },
-  'Paralyze Heal': { kind: 'status', cures: ['par'], price: 300, slug: 'paralyze-heal', desc: 'Cures paralysis.' },
-  'Awakening': { kind: 'status', cures: ['slp'], price: 100, slug: 'awakening', desc: 'Wakes a sleeping Pokémon.' },
-  'Burn Heal': { kind: 'status', cures: ['brn'], price: 300, slug: 'burn-heal', desc: 'Heals a burn.' },
-  'Ice Heal': { kind: 'status', cures: ['frz'], price: 100, slug: 'ice-heal', desc: 'Thaws a frozen Pokémon.' },
-  'Full Heal': { kind: 'status', cures: 'all', price: 400, slug: 'full-heal', desc: 'Cures any status condition.' },
-  'Elixir': { kind: 'pp', all: true, amount: 10, price: 1800, slug: 'elixir', desc: 'Restores 10 PP to each move.' },
-  'Max Elixir': { kind: 'pp', all: true, amount: 0, price: 4500, slug: 'max-elixir', desc: 'Fully restores the PP of each move.' },
+  'Potion': { kind: 'heal', amount: 20, price: 20, slug: 'potion', desc: 'Restores 20 HP.' },
+  'Super Potion': { kind: 'heal', amount: 60, price: 70, slug: 'super-potion', desc: 'Restores 60 HP.' },
+  'Hyper Potion': { kind: 'heal', amount: 120, price: 150, slug: 'hyper-potion', desc: 'Restores 120 HP.' },
+  'Max Potion': { kind: 'heal', amount: 0, price: 250, slug: 'max-potion', desc: 'Fully restores HP.' },
+  'Full Restore': { kind: 'heal', amount: 0, cure: true, price: 300, slug: 'full-restore', desc: 'Fully restores HP and cures status.' },
+  'Revive': { kind: 'revive', price: 200, slug: 'revive', desc: 'Revives a fainted Pokémon with half its HP.' },
+  'Max Revive': { kind: 'revive', full: true, price: 400, slug: 'max-revive', desc: 'Revives a fainted Pokémon with full HP.' },
+  'Antidote': { kind: 'status', cures: ['psn', 'tox'], price: 10, slug: 'antidote', desc: 'Cures poison.' },
+  'Paralyze Heal': { kind: 'status', cures: ['par'], price: 30, slug: 'paralyze-heal', desc: 'Cures paralysis.' },
+  'Awakening': { kind: 'status', cures: ['slp'], price: 10, slug: 'awakening', desc: 'Wakes a sleeping Pokémon.' },
+  'Burn Heal': { kind: 'status', cures: ['brn'], price: 30, slug: 'burn-heal', desc: 'Heals a burn.' },
+  'Ice Heal': { kind: 'status', cures: ['frz'], price: 10, slug: 'ice-heal', desc: 'Thaws a frozen Pokémon.' },
+  'Full Heal': { kind: 'status', cures: 'all', price: 40, slug: 'full-heal', desc: 'Cures any status condition.' },
+  'Elixir': { kind: 'pp', all: true, amount: 10, price: 180, slug: 'elixir', desc: 'Restores 10 PP to each move.' },
+  'Max Elixir': { kind: 'pp', all: true, amount: 0, price: 450, slug: 'max-elixir', desc: 'Fully restores the PP of each move.' },
 
-  'Rare Candy': { kind: 'candy', price: 10000, slug: 'rare-candy', desc: 'Raises a Pokémon by one level.' },
-  'Exp. Candy S': { kind: 'expcandy', amount: 800, price: 1000, slug: 'exp-candy-s', desc: 'Gives 800 Exp. Points.' },
-  'Exp. Candy M': { kind: 'expcandy', amount: 3000, price: 3500, slug: 'exp-candy-m', desc: 'Gives 3,000 Exp. Points.' },
-  'Exp. Candy L': { kind: 'expcandy', amount: 10000, price: 10000, slug: 'exp-candy-l', desc: 'Gives 10,000 Exp. Points.' },
-  'Linking Cord': { kind: 'evo', price: 8000, slug: 'linking-cord', desc: 'Evolves Pokémon that evolve by trade or special conditions.' },
+  'Rare Candy': { kind: 'candy', price: 1000, slug: 'rare-candy', desc: 'Raises a Pokémon by one level.' },
+  'Exp. Candy S': { kind: 'expcandy', amount: 800, price: 100, slug: 'exp-candy-s', desc: 'Gives 800 Exp. Points.' },
+  'Exp. Candy M': { kind: 'expcandy', amount: 3000, price: 350, slug: 'exp-candy-m', desc: 'Gives 3,000 Exp. Points.' },
+  'Exp. Candy L': { kind: 'expcandy', amount: 10000, price: 1000, slug: 'exp-candy-l', desc: 'Gives 10,000 Exp. Points.' },
+  // EV training (Gen 8+ rules: +10 EVs, up to the 252 cap) and Hyper Training (needs Lv 50)
+  'HP Up': { kind: 'vitamin', stat: 0, price: 1000, slug: 'hp-up', desc: '+10 HP EVs (up to 252).' },
+  'Protein': { kind: 'vitamin', stat: 1, price: 1000, slug: 'protein', desc: '+10 Attack EVs (up to 252).' },
+  'Iron': { kind: 'vitamin', stat: 2, price: 1000, slug: 'iron', desc: '+10 Defense EVs (up to 252).' },
+  'Calcium': { kind: 'vitamin', stat: 3, price: 1000, slug: 'calcium', desc: '+10 Sp. Atk EVs (up to 252).' },
+  'Zinc': { kind: 'vitamin', stat: 4, price: 1000, slug: 'zinc', desc: '+10 Sp. Def EVs (up to 252).' },
+  'Carbos': { kind: 'vitamin', stat: 5, price: 1000, slug: 'carbos', desc: '+10 Speed EVs (up to 252).' },
+  'Bottle Cap': { kind: 'cap', price: 0, slug: 'bottle-cap', desc: 'Hyper Training: raises a Lv 50+ Pokémon\'s lowest IV to 31.' },
+  'Gold Bottle Cap': { kind: 'cap', all: true, price: 0, slug: 'gold-bottle-cap', desc: 'Hyper Training: raises all of a Lv 50+ Pokémon\'s IVs to 31.' },
+  'Linking Cord': { kind: 'evo', price: 800, slug: 'linking-cord', desc: 'Evolves Pokémon that evolve by trade or special conditions.' },
 };
 
 // Evolution items (all used from the bag)
@@ -47,15 +56,172 @@ const EVO_ITEMS = {
 };
 const STONES = ['Fire Stone', 'Water Stone', 'Thunder Stone', 'Leaf Stone', 'Moon Stone', 'Sun Stone', 'Shiny Stone', 'Dusk Stone', 'Dawn Stone', 'Ice Stone'];
 for (const [name, slug] of Object.entries(EVO_ITEMS)) {
-  ITEMS[name] = { kind: 'evo', price: STONES.includes(name) ? 3000 : 5000, slug, desc: 'Makes certain Pokémon evolve.' };
+  ITEMS[name] = { kind: 'evo', price: STONES.includes(name) ? 300 : 500, slug, desc: 'Makes certain Pokémon evolve.' };
 }
 export const STONE_LIST = STONES;
+
+// ---------- Held items (one per Pokémon; `fx` is what the battle engine looks for) ----------
+const HELD = {
+  'Leftovers': ['leftovers', 'leftovers', 'Restores 1/16 of max HP at the end of every turn.'],
+  'Shell Bell': ['shellbell', 'shell-bell', 'Restores HP equal to 1/8 of the damage the holder deals.'],
+  'Life Orb': ['lifeorb', 'life-orb', 'Boosts moves by 30%, but the holder loses 1/10 of its max HP after attacking.'],
+  'Choice Band': ['choiceband', 'choice-band', 'Boosts Attack by 50%, but the holder can only use the first move it picks.'],
+  'Choice Specs': ['choicespecs', 'choice-specs', 'Boosts Sp. Atk by 50%, but the holder can only use the first move it picks.'],
+  'Choice Scarf': ['choicescarf', 'choice-scarf', 'Boosts Speed by 50%, but the holder can only use the first move it picks.'],
+  'Focus Sash': ['focussash', 'focus-sash', 'At full HP, the holder survives a hit that would KO it with 1 HP. Single use.'],
+  'Focus Band': ['focusband', 'focus-band', '10% chance to survive a hit that would KO the holder, with 1 HP.'],
+  'Quick Claw': ['quickclaw', 'quick-claw', '20% chance for the holder to move first among moves of the same priority.'],
+  'Scope Lens': ['scopelens', 'scope-lens', 'Raises the holder\'s critical-hit ratio by one stage.'],
+  'Expert Belt': ['expertbelt', 'expert-belt', 'Super-effective moves do 20% more damage.'],
+  'Muscle Band': ['muscleband', 'muscle-band', 'Physical moves do 10% more damage.'],
+  'Wise Glasses': ['wiseglasses', 'wise-glasses', 'Special moves do 10% more damage.'],
+  'Assault Vest': ['assaultvest', 'assault-vest', 'Raises Sp. Def by 50%, but the holder can\'t use status moves.'],
+  'Eviolite': ['eviolite', 'eviolite', 'Raises Defense and Sp. Def by 50% if the holder can still evolve.'],
+  'Rocky Helmet': ['rockyhelmet', 'rocky-helmet', 'Attackers that make contact lose 1/6 of their max HP.'],
+  'White Herb': ['whiteherb', 'white-herb', 'Restores the holder\'s lowered stats. Single use.'],
+  'Lucky Egg': ['luckyegg', 'lucky-egg', 'The holder gets 50% more Exp. Points.'],
+  'Amulet Coin': ['amuletcoin', 'amulet-coin', 'Doubles prize money if the holder is on your team.'],
+  'Oran Berry': ['oran', 'oran-berry', 'Restores 10 HP when the holder\'s HP drops to half or less. Single use.'],
+  'Sitrus Berry': ['sitrus', 'sitrus-berry', 'Restores 1/4 of max HP when the holder\'s HP drops to half or less. Single use.'],
+  'Lum Berry': ['lum', 'lum-berry', 'Cures any status condition. Single use.'],
+};
+for (const [name, [fx, slug, desc]] of Object.entries(HELD)) ITEMS[name] = { kind: 'held', fx, price: 0, slug, desc };
+// Type-boosting held items (×1.2)
+export const TYPE_BOOSTERS = {
+  Normal: 'Silk Scarf', Fire: 'Charcoal', Water: 'Mystic Water', Grass: 'Miracle Seed', Electric: 'Magnet', Ice: 'Never-Melt Ice',
+  Fighting: 'Black Belt', Poison: 'Poison Barb', Ground: 'Soft Sand', Flying: 'Sharp Beak', Psychic: 'Twisted Spoon', Bug: 'Silver Powder',
+  Rock: 'Hard Stone', Ghost: 'Spell Tag', Dragon: 'Dragon Fang', Dark: 'Black Glasses', Steel: 'Iron Plate', Fairy: 'Fairy Feather',
+};
+for (const [type, name] of Object.entries(TYPE_BOOSTERS)) {
+  ITEMS[name] = { kind: 'held', fx: 'boost', type, price: 0, slug: name.toLowerCase().replace(/ /g, '-'), desc: `Boosts ${type}-type moves by 20%.` };
+}
+export const HELD_KINDS = ['held', 'mega', 'z'];
+
+// ---------- Battle gimmicks ----------
+export const KEY_ITEMS = {
+  'Mega Bracelet': { gimmick: 'mega', slug: 'mega-bracelet', desc: 'Lets a Pokémon holding its Mega Stone Mega Evolve in battle (once per battle).' },
+  'Z-Ring': { gimmick: 'z', slug: 'z-ring', desc: 'Lets a Pokémon holding a Z-Crystal unleash a Z-Move (once per battle).' },
+  'Dynamax Band': { gimmick: 'dmax', slug: 'dynamax-band', desc: 'Lets a Pokémon Dynamax for three turns (once per battle).' },
+  'Tera Orb': { gimmick: 'tera', slug: 'tera-orb', desc: 'Lets a Pokémon Terastallize into its Tera Type (once per battle).' },
+};
+for (const [name, k] of Object.entries(KEY_ITEMS)) ITEMS[name] = { kind: 'key', price: 0, ...k };
+export const GIMMICK_KEY = Object.fromEntries(Object.entries(KEY_ITEMS).map(([n, k]) => [k.gimmick, n]));
+export const GIMMICK_NAMES = { mega: 'Mega Evolution', z: 'Z-Move', dmax: 'Dynamax', tera: 'Terastallize' };
+
+export const Z_CRYSTALS = {
+  Normal: 'Normalium Z', Fire: 'Firium Z', Water: 'Waterium Z', Electric: 'Electrium Z', Grass: 'Grassium Z', Ice: 'Icium Z',
+  Fighting: 'Fightinium Z', Poison: 'Poisonium Z', Ground: 'Groundium Z', Flying: 'Flyinium Z', Psychic: 'Psychium Z', Bug: 'Buginium Z',
+  Rock: 'Rockium Z', Ghost: 'Ghostium Z', Dragon: 'Dragonium Z', Dark: 'Darkinium Z', Steel: 'Steelium Z', Fairy: 'Fairium Z',
+};
+export const Z_MOVES = {
+  Normal: 'Breakneck Blitz', Fire: 'Inferno Overdrive', Water: 'Hydro Vortex', Electric: 'Gigavolt Havoc', Grass: 'Bloom Doom',
+  Ice: 'Subzero Slammer', Fighting: 'All-Out Pummeling', Poison: 'Acid Downpour', Ground: 'Tectonic Rage', Flying: 'Supersonic Skystrike',
+  Psychic: 'Shattered Psyche', Bug: 'Savage Spin-Out', Rock: 'Continental Crush', Ghost: 'Never-Ending Nightmare', Dragon: 'Devastating Drake',
+  Dark: 'Black Hole Eclipse', Steel: 'Corkscrew Crash', Fairy: 'Twinkle Tackle',
+};
+for (const [type, name] of Object.entries(Z_CRYSTALS)) {
+  ITEMS[name] = { kind: 'z', type, price: 0, slug: name.toLowerCase().replace(/ /g, '-') + '--held', desc: `Hold it to turn ${type}-type moves into the Z-Move ${Z_MOVES[type]}.` };
+}
+// Max Moves by type, with what they do besides damage (Gen 8)
+export const MAX_MOVES = {
+  Normal: ['Max Strike', { foe: { spe: -1 } }], Fire: ['Max Flare', { weather: 'sun' }], Water: ['Max Geyser', { weather: 'rain' }],
+  Electric: ['Max Lightning', { terrain: 'electric' }], Grass: ['Max Overgrowth', { terrain: 'grassy' }], Ice: ['Max Hailstorm', { weather: 'snow' }],
+  Fighting: ['Max Knuckle', { self: { atk: 1 } }], Poison: ['Max Ooze', { self: { spa: 1 } }], Ground: ['Max Quake', { self: { spd: 1 } }],
+  Flying: ['Max Airstream', { self: { spe: 1 } }], Psychic: ['Max Mindstorm', { terrain: 'psychic' }], Bug: ['Max Flutterby', { foe: { spa: -1 } }],
+  Rock: ['Max Rockfall', { weather: 'sand' }], Ghost: ['Max Phantasm', { foe: { def: -1 } }], Dragon: ['Max Wyrmwind', { foe: { atk: -1 } }],
+  Dark: ['Max Darkness', { foe: { spd: -1 } }], Steel: ['Max Steelspike', { self: { def: 1 } }], Fairy: ['Max Starfall', { terrain: 'misty' }],
+};
+export const TYPE_LIST = Object.keys(Z_CRYSTALS);
+for (const type of TYPE_LIST) {
+  ITEMS[`${type} Tera Shard`] = { kind: 'terashard', type, price: 0, slug: `${type.toLowerCase()}-tera-shard`, desc: `Changes a Pokémon's Tera Type to ${type}.` };
+}
+ITEMS['Max Mushrooms'] = { kind: 'gmaxfactor', price: 0, slug: 'max-mushrooms', desc: 'Gives a Pokémon that can Gigantamax the Gigantamax Factor.' };
+ITEMS['Ability Capsule'] = { kind: 'capsule', price: 0, slug: 'ability-capsule', desc: 'Switches a Pokémon between its two regular Abilities.' };
+ITEMS['Ability Patch'] = { kind: 'patch', price: 0, slug: 'ability-patch', desc: 'Changes a Pokémon\'s Ability to its Hidden Ability.' };
+ITEMS['Nugget'] = { kind: 'valuable', value: 500, price: 0, slug: 'nugget', desc: 'Sells for $500. Use it from the Bag to get the money.' };
+ITEMS['Big Nugget'] = { kind: 'valuable', value: 2000, price: 0, slug: 'big-nugget', desc: 'Sells for $2,000. Use it from the Bag to get the money.' };
+export const MINT_NATURES = ['Lonely', 'Adamant', 'Naughty', 'Brave', 'Bold', 'Impish', 'Lax', 'Relaxed', 'Modest', 'Mild', 'Rash', 'Quiet', 'Calm', 'Gentle', 'Careful', 'Sassy', 'Timid', 'Hasty', 'Jolly', 'Naive', 'Serious'];
+for (const n of MINT_NATURES) ITEMS[`${n} Mint`] = { kind: 'mint', nature: n, price: 0, slug: `${n.toLowerCase()}-mint`, desc: `Changes a Pokémon's stats to match the ${n} nature.` };
+
+// ---------- TMs and HMs (single use, like Scarlet/Violet) ----------
+export const HM_MOVES = ['cut', 'fly', 'surf', 'strength', 'flash', 'rocksmash', 'waterfall', 'dive', 'whirlpool', 'defog', 'rockclimb'];
+export const TM_BY_MOVE = {};
+/** One TM (or HM) item per move any Pokémon can learn from a machine or tutor. */
+export function registerTMItems(MOVES, moveIds) {
+  for (const id of moveIds) {
+    const mv = MOVES[id];
+    if (!mv || TM_BY_MOVE[id]) continue;
+    const hm = HM_MOVES.includes(id);
+    const name = `${hm ? 'HM' : 'TM'} ${mv.n}`;
+    const cat = { P: 'Physical', X: 'Special', S: 'Status' }[mv.c];
+    ITEMS[name] = { kind: 'tm', move: id, price: 0, slug: `${hm ? 'hm' : 'tm'}-${mv.t.toLowerCase()}`, desc: `Teaches ${mv.n} (${mv.t} · ${cat}${mv.p ? ` · Pow ${mv.p}` : ''}). ${mv.d || ''} Used up once learned.` };
+    TM_BY_MOVE[id] = name;
+  }
+}
+
+/** Mega Stones and the Primal orbs come from the form data, so they're added after it loads. */
+export function registerFormItems(FORMS, DEX) {
+  for (const [id, f] of Object.entries(FORMS)) {
+    for (const m of f.mega || []) {
+      if (!m.item || ITEMS[m.item]) continue;
+      ITEMS[m.item] = {
+        kind: 'mega', species: +id, price: 0, slug: m.item.toLowerCase().replace(/ /g, '-'),
+        desc: m.kind === 'primal' ? `${DEX[id].n} holding it undergoes Primal Reversion when it enters battle.` : `Lets ${DEX[id].n} Mega Evolve into ${m.n} (needs a Mega Bracelet).`,
+      };
+    }
+  }
+}
 export const EVO_ITEM_LIST = Object.keys(EVO_ITEMS);
+
+// ---------- Difficulty modes ----------
+// Easy/Medium follow the regular games; Hard follows common "hard mode" rules (higher levels,
+// perfect-IV trainers, smart AI); Hell adds Nuzlocke rules on top (fainted = gone, no items in
+// trainer battles) with maxed-out opponents.
+export const DIFFICULTIES = {
+  easy: {
+    name: 'Easy', color: '#4cd07a',
+    levelMult: 0.85, ivs: 'low', evs: 0, ai: 'basic', extraFullRestores: 0,
+    expMult: 1.5, prizeMult: 1.5, priceMult: 0.75,
+    bag: { 'Poké Ball': 10, 'Potion': 5, 'Revive': 1 },
+    battleItems: true, permadeath: false,
+    rules: ['Opponents are 15% lower level', 'Weaker opponent stats and simpler AI', '+50% Exp. and prize money', 'Shop prices 25% off', 'Starts with 10 Poké Balls, 5 Potions and a Revive'],
+  },
+  medium: {
+    name: 'Medium', color: '#4aa3ff',
+    levelMult: 1, ivs: 'random', evs: 0, ai: 'normal', extraFullRestores: 0,
+    expMult: 1, prizeMult: 1, priceMult: 1,
+    bag: { 'Poké Ball': 5, 'Potion': 3 },
+    battleItems: true, permadeath: false,
+    rules: ['The standard experience, balanced like the main games', 'Random opponent IVs; smarter Gym Leaders and bosses', 'Normal Exp., prize money and shop prices', 'Starts with 5 Poké Balls and 3 Potions'],
+  },
+  hard: {
+    name: 'Hard', color: '#f2994a',
+    levelMult: 1.1, ivs: 'trainersMax', evs: 0, ai: 'smart', extraFullRestores: 1,
+    expMult: 1, prizeMult: 0.8, priceMult: 1.25,
+    bag: { 'Poké Ball': 3, 'Potion': 1 },
+    battleItems: true, permadeath: false,
+    rules: ['Opponents are 10% higher level', 'Every trainer has perfect IVs and battles smart', 'Bosses carry an extra Full Restore', 'Prize money −20%, shop prices +25%', 'Starts with 3 Poké Balls and 1 Potion'],
+  },
+  hell: {
+    name: 'Hell', color: '#eb5757',
+    levelMult: 1.2, ivs: 'allMax', evs: 252, ai: 'smart', extraFullRestores: 2,
+    expMult: 1, prizeMult: 0.5, priceMult: 1.5,
+    bag: { 'Poké Ball': 3 },
+    battleItems: false, permadeath: true,
+    rules: ['Nuzlocke rules: a Pokémon that faints is gone for good', 'No items during trainer battles (Poké Balls still work on wild Pokémon)', 'Opponents are 20% higher level with perfect IVs and trained EVs', 'Bosses carry two extra Full Restores', 'Prize money halved, shop prices +50%, no Revives', 'Starts with 3 Poké Balls'],
+  },
+};
+export const diffOf = run => DIFFICULTIES[run?.difficulty] || DIFFICULTIES.medium;
 
 export const BAG_POCKETS = [
   ['Poké Balls', ['ball']],
   ['Medicine', ['heal', 'revive', 'status', 'pp']],
-  ['Other', ['candy', 'expcandy', 'evo']],
+  ['Training', ['candy', 'expcandy', 'vitamin', 'cap']],
+  ['Evolution', ['evo', 'gmaxfactor']],
+  ['Held items', ['held', 'mega', 'z']],
+  ['TMs', ['tm']],
+  ['Other', ['terashard', 'mint', 'capsule', 'patch', 'valuable']],
+  ['Key items', ['key']],
 ];
 
 // ---------- Trainer classes for random trainer battles ----------
@@ -115,6 +281,7 @@ export const GYM_LEADERS = [
   { name: 'Byron', region: 'Sinnoh', type: 'Steel', sprite: 'byron', badge: 'Mine', team: ['Bronzor', 'Magneton', 'Steelix', 'Bronzong', 'Empoleon', 'Bastiodon'] },
   { name: 'Candice', region: 'Sinnoh', type: 'Ice', sprite: 'candice', badge: 'Icicle', team: ['Snover', 'Sneasel', 'Glaceon', 'Mamoswine', 'Weavile', 'Froslass'] },
   { name: 'Volkner', region: 'Sinnoh', type: 'Electric', sprite: 'volkner', badge: 'Beacon', team: ['Shinx', 'Raichu', 'Jolteon', 'Ambipom', 'Electivire', 'Luxray'] },
+  { name: 'Cilan', region: 'Unova', type: 'Grass', sprite: 'cilan', badge: 'Trio', team: ['Lillipup', 'Pansage', 'Pansage', 'Simisage', 'Simisage', 'Simisage'] },
   { name: 'Lenora', region: 'Unova', type: 'Normal', sprite: 'lenora', badge: 'Basic', team: ['Lillipup', 'Watchog', 'Herdier', 'Cinccino', 'Bouffalant', 'Stoutland'] },
   { name: 'Burgh', region: 'Unova', type: 'Bug', sprite: 'burgh', badge: 'Insect', team: ['Sewaddle', 'Whirlipede', 'Crustle', 'Escavalier', 'Scolipede', 'Leavanny'] },
   { name: 'Elesa', region: 'Unova', type: 'Electric', sprite: 'elesa', badge: 'Bolt', team: ['Emolga', 'Blitzle', 'Joltik', 'Galvantula', 'Eelektross', 'Zebstrika'] },
@@ -131,6 +298,14 @@ export const GYM_LEADERS = [
   { name: 'Valerie', region: 'Kalos', type: 'Fairy', sprite: 'valerie', badge: 'Fairy', team: ['Spritzee', 'Mawile', 'Swirlix', 'Aromatisse', 'Slurpuff', 'Sylveon'] },
   { name: 'Olympia', region: 'Kalos', type: 'Psychic', sprite: 'olympia', badge: 'Psychic', team: ['Espurr', 'Sigilyph', 'Slowking', 'Delphox', 'Gothitelle', 'Meowstic'] },
   { name: 'Wulfric', region: 'Kalos', type: 'Ice', sprite: 'wulfric', badge: 'Iceberg', team: ['Bergmite', 'Snover', 'Cryogonal', 'Abomasnow', 'Mamoswine', 'Avalugg'] },
+  { name: 'Ilima', region: 'Alola', type: 'Normal', title: 'Alola Trial Captain', sprite: 'ilima', badge: 'Normalium Z', team: ['Yungoos', 'Smeargle', 'Gumshoos', 'Smeargle', 'Komala', 'Gumshoos'] },
+  { name: 'Lana', region: 'Alola', type: 'Water', title: 'Alola Trial Captain', sprite: 'lana', badge: 'Waterium Z', team: ['Wishiwashi', 'Dewpider', 'Araquanid', 'Lanturn', 'Cloyster', 'Araquanid'] },
+  { name: 'Kiawe', region: 'Alola', type: 'Fire', title: 'Alola Trial Captain', sprite: 'kiawe', badge: 'Firium Z', team: ['Salandit', 'Marowak', 'Arcanine', 'Turtonator', 'Salazzle', 'Marowak'] },
+  { name: 'Mallow', region: 'Alola', type: 'Grass', title: 'Alola Trial Captain', sprite: 'mallow', badge: 'Grassium Z', team: ['Fomantis', 'Bounsweet', 'Trevenant', 'Shiinotic', 'Lurantis', 'Tsareena'] },
+  { name: 'Sophocles', region: 'Alola', type: 'Electric', title: 'Alola Trial Captain', sprite: 'sophocles', badge: 'Electrium Z', team: ['Charjabug', 'Togedemaru', 'Magnezone', 'Golem', 'Vikavolt', 'Togedemaru'] },
+  { name: 'Acerola', region: 'Alola', type: 'Ghost', title: 'Alola Trial Captain', sprite: 'acerola', badge: 'Ghostium Z', team: ['Sableye', 'Mimikyu', 'Drifblim', 'Dhelmise', 'Froslass', 'Mimikyu'] },
+  { name: 'Mina', region: 'Alola', type: 'Fairy', title: 'Alola Trial Captain', sprite: 'mina', badge: 'Fairium Z', team: ['Klefki', 'Granbull', 'Shiinotic', 'Wigglytuff', 'Ribombee', 'Granbull'] },
+  { name: 'Hapu', region: 'Alola', type: 'Ground', title: 'Alola Island Kahuna', sprite: 'hapu', badge: 'Groundium Z', team: ['Dugtrio', 'Gastrodon', 'Flygon', 'Golurk', 'Mudsdale', 'Mudsdale'] },
   { name: 'Milo', region: 'Galar', type: 'Grass', sprite: 'milo', badge: 'Grass', team: ['Gossifleur', 'Applin', 'Ludicolo', 'Flapple', 'Appletun', 'Eldegoss'] },
   { name: 'Nessa', region: 'Galar', type: 'Water', sprite: 'nessa', badge: 'Water', team: ['Chewtle', 'Arrokuda', 'Pelipper', 'Golisopod', 'Barraskewda', 'Drednaw'] },
   { name: 'Kabu', region: 'Galar', type: 'Fire', sprite: 'kabu', badge: 'Fire', team: ['Sizzlipede', 'Ninetales', 'Arcanine', 'Torkoal', 'Coalossal', 'Centiskorch'] },
@@ -193,6 +368,10 @@ export const ELITE_FOUR = [
   { name: 'Olivia', region: 'Alola', type: 'Rock', sprite: 'olivia', team: ['Relicanth', 'Carbink', 'Golem', 'Probopass', 'Lycanroc'] },
   { name: 'Acerola', region: 'Alola', type: 'Ghost', sprite: 'acerola', team: ['Sableye', 'Drifblim', 'Dhelmise', 'Froslass', 'Palossand'] },
   { name: 'Kahili', region: 'Alola', type: 'Flying', sprite: 'kahili', team: ['Skarmory', 'Crobat', 'Oricorio', 'Mandibuzz', 'Toucannon'] },
+  { name: 'Marnie', region: 'Galar', type: 'Dark', title: 'Champion Cup', sprite: 'marnie', team: ['Liepard', 'Toxicroak', 'Scrafty', 'Morpeko', 'Grimmsnarl'] },
+  { name: 'Hop', region: 'Galar', type: 'Normal', title: 'Champion Cup', sprite: 'hop', team: ['Dubwool', 'Pincurchin', 'Corviknight', 'Snorlax', 'Rillaboom'] },
+  { name: 'Bede', region: 'Galar', type: 'Fairy', title: 'Champion Cup', sprite: 'bede', team: ['Mawile', 'Gothitelle', 'Gardevoir', 'Rapidash', 'Hatterene'] },
+  { name: 'Raihan', region: 'Galar', type: 'Dragon', title: 'Champion Cup', sprite: 'raihan', team: ['Flygon', 'Sandaconda', 'Gigalith', 'Goodra', 'Duraludon'] },
   { name: 'Rika', region: 'Paldea', type: 'Ground', sprite: 'rika', team: ['Whiscash', 'Camerupt', 'Donphan', 'Dugtrio', 'Clodsire'] },
   { name: 'Poppy', region: 'Paldea', type: 'Steel', sprite: 'poppy', team: ['Copperajah', 'Magnezone', 'Bronzong', 'Corviknight', 'Tinkaton'] },
   { name: 'Larry', region: 'Paldea', type: 'Flying', sprite: 'larry-elite', team: ['Tropius', 'Oricorio', 'Altaria', 'Staraptor', 'Flamigo'] },
@@ -216,3 +395,28 @@ export const CHAMPIONS = [
 ];
 
 export const trainerSpriteUrl = name => `https://play.pokemonshowdown.com/sprites/trainers/${name}.png`;
+
+// ---------- Classic mode: each region's own Gym order, villain team, Elite Four and Champion ----------
+export const CLASSIC = {
+  Kanto: { gyms: ['Brock', 'Misty', 'Lt. Surge', 'Erika', 'Koga', 'Sabrina', 'Blaine', 'Giovanni'], villains: ['Team Rocket'], e4: ['Lorelei', 'Bruno', 'Agatha', 'Lance'], champion: 'Blue' },
+  Johto: { gyms: ['Falkner', 'Bugsy', 'Whitney', 'Morty', 'Chuck', 'Jasmine', 'Pryce', 'Clair'], villains: ['Team Rocket'], e4: ['Will', 'Koga', 'Bruno', 'Karen'], champion: 'Lance' },
+  Hoenn: { gyms: ['Roxanne', 'Brawly', 'Wattson', 'Flannery', 'Norman', 'Winona', 'Tate & Liza', 'Wallace'], villains: ['Team Magma', 'Team Aqua'], e4: ['Sidney', 'Phoebe', 'Glacia', 'Drake'], champion: 'Steven' },
+  Sinnoh: { gyms: ['Roark', 'Gardenia', 'Maylene', 'Crasher Wake', 'Fantina', 'Byron', 'Candice', 'Volkner'], villains: ['Team Galactic'], e4: ['Aaron', 'Bertha', 'Flint', 'Lucian'], champion: 'Cynthia' },
+  Unova: { gyms: ['Cilan', 'Lenora', 'Burgh', 'Elesa', 'Clay', 'Skyla', 'Brycen', 'Drayden'], villains: ['Team Plasma'], e4: ['Shauntal', 'Grimsley', 'Caitlin', 'Marshal'], champion: 'Alder' },
+  Kalos: { gyms: ['Viola', 'Grant', 'Korrina', 'Ramos', 'Clemont', 'Valerie', 'Olympia', 'Wulfric'], villains: ['Team Flare'], e4: ['Malva', 'Siebold', 'Wikstrom', 'Drasna'], champion: 'Diantha' },
+  Alola: { gyms: ['Ilima', 'Lana', 'Kiawe', 'Mallow', 'Sophocles', 'Acerola', 'Mina', 'Hapu'], villains: ['Team Skull'], e4: ['Hala', 'Olivia', 'Acerola', 'Kahili'], champion: 'Kukui' },
+  Galar: { gyms: ['Milo', 'Nessa', 'Kabu', 'Bea', 'Opal', 'Gordie', 'Piers', 'Raihan'], villains: ['Team Yell'], e4: ['Marnie', 'Hop', 'Bede', 'Raihan'], champion: 'Leon' },
+  Paldea: { gyms: ['Katy', 'Brassius', 'Iono', 'Kofu', 'Larry', 'Ryme', 'Tulip', 'Grusha'], villains: ['Team Star'], e4: ['Rika', 'Poppy', 'Larry', 'Hassel'], champion: 'Geeta' },
+};
+
+export const GAME_MODES = {
+  classic: {
+    name: 'Classic', color: '#ffcb05',
+    rules: ["Your starter's home region sets the whole journey", "That region's Gym Leaders, in order, with their signature teams", "Its villain team, Elite Four and Champion", 'Wild Pokémon, Legendaries and Trainers\' Pokémon from every region'],
+  },
+  random: {
+    name: 'Randomized', color: '#b48cff',
+    rules: ['Gym Leaders, villain teams, Elite Four and Champion drawn from every region', 'Every Trainer team, Gym team and boss team is fully randomized', 'Wild Pokémon from all 1,025 species'],
+  },
+};
+export const modeOf = run => (run?.mode === 'classic' ? 'classic' : 'random');

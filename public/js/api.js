@@ -1,32 +1,186 @@
-// Thin client for the PokeSpire API. Saves are debounced so rapid changes coalesce.
+// Accounts and saves, backed by Supabase (Auth + Postgres with row-level security).
+// Saves are debounced so rapid changes coalesce into one write.
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/+esm';
 
-async function request(method, path, body) {
-  const res = await fetch(path, {
-    method,
-    credentials: 'same-origin',
-    headers: body ? { 'content-type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  let data = null;
-  try { data = await res.json(); } catch { /* empty */ }
-  if (!res.ok) {
-    const e = new Error(data?.error || `Request failed (${res.status})`);
-    e.status = res.status;
-    throw e;
-  }
-  return data;
+const cfg = window.POKESPIRE_CONFIG || {};
+export const configured = Boolean(cfg.supabaseUrl && cfg.supabaseAnonKey && !cfg.supabaseUrl.includes('YOUR-PROJECT'));
+const sb = configured ? createClient(cfg.supabaseUrl, cfg.supabaseAnonKey) : null;
+
+class ApiError extends Error {
+  constructor(message, status = 400) { super(message); this.status = status; }
+}
+const fail = (error, fallback) => { if (error) throw new ApiError(friendly(error.message || fallback), error.status || 400); };
+function friendly(msg) {
+  if (/invalid login credentials/i.test(msg)) return 'Wrong email or password.';
+  if (/email not confirmed/i.test(msg)) return 'Please confirm your email address first (check your inbox), then log in.';
+  if (/already registered|already been registered/i.test(msg)) return 'An account with that email already exists.';
+  if (/database error saving new user/i.test(msg)) return 'That username is taken.';
+  if (/rate limit/i.test(msg)) return 'Too many attempts. Please wait a minute and try again.';
+  return msg;
 }
 
+async function currentUserId() {
+  const { data } = await sb.auth.getSession();
+  const id = data.session?.user?.id;
+  if (!id) throw new ApiError('Sign in required', 401);
+  return id;
+}
+
+const USERNAME_RE = /^[A-Za-z0-9_]{3,20}$/;
+
 export const api = {
-  signup: (username, password) => request('POST', '/api/auth/signup', { username, password }),
-  login: (username, password) => request('POST', '/api/auth/login', { username, password }),
-  logout: () => request('POST', '/api/auth/logout'),
-  me: () => request('GET', '/api/me'),
-  history: () => request('GET', '/api/history'),
-  addHistory: entry => request('POST', '/api/history', { entry }),
-  deleteRun: () => request('DELETE', '/api/run'),
+  async signup(username, email, password) {
+    if (!USERNAME_RE.test(username)) throw new ApiError('Username must be 3–20 letters, numbers or underscores.');
+    if (password.length < 8) throw new ApiError('Password must be at least 8 characters.');
+    const { data: free, error: e1 } = await sb.rpc('username_available', { name: username });
+    fail(e1);
+    if (!free) throw new ApiError('That username is taken.', 409);
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: { data: { username }, emailRedirectTo: location.origin + location.pathname },
+    });
+    fail(error);
+    // With "Confirm email" enabled in Supabase there is no session until the link is clicked
+    return { needsConfirmation: !data.session };
+  },
+
+  async login(email, password) {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    fail(error);
+  },
+
+  async logout() {
+    await sb.auth.signOut();
+  },
+
+  async me() {
+    const id = await currentUserId();
+    const [p, r] = await Promise.all([
+      sb.from('profiles').select('username, data, is_admin').eq('user_id', id).maybeSingle(),
+      sb.from('runs').select('data').eq('user_id', id).maybeSingle(),
+    ]);
+    fail(p.error); fail(r.error);
+    if (!p.data) throw new ApiError('Profile not found', 401);
+    const profile = p.data.data && Object.keys(p.data.data).length ? p.data.data : null;
+    return { user: { id, username: p.data.username, isAdmin: !!p.data.is_admin }, profile, run: r.data?.data || null };
+  },
+
+  async history() {
+    const { data, error } = await sb.from('history').select('id, result, data, created_at')
+      .order('id', { ascending: false }).limit(100);
+    fail(error);
+    return { history: data.map(r => ({ id: r.id, result: r.result, createdAt: r.created_at, ...r.data })) };
+  },
+
+  /** Ends the run on the server, which checks the score against its own record of the run. Returns the score kept. */
+  async addHistory(entry) {
+    const { data, error } = await sb.rpc('finish_run', { entry });
+    if (!error) return data;
+    // Before the server check is installed, fall back to a plain insert
+    if (!/finish_run|PGRST202|function/i.test(error.message || '') && error.code !== 'PGRST202') fail(error);
+    const id = await currentUserId();
+    const score = Math.max(0, Math.min(1000000, Math.round(entry.score || 0)));
+    const { error: e2 } = await sb.from('history').insert({ user_id: id, result: String(entry.result).slice(0, 40), data: entry, score });
+    fail(e2);
+    await api.deleteRun();
+    return score;
+  },
+
+  async deleteRun() {
+    const id = await currentUserId();
+    const { error } = await sb.from('runs').delete().eq('user_id', id);
+    fail(error);
+  },
 };
 
+// ---------- Social: leaderboard, friends, points ----------
+Object.assign(api, {
+  async leaderboard(kind = 'best') {
+    const { data, error } = await sb.rpc('leaderboard', { kind, lim: 50 });
+    fail(error);
+    return data;
+  },
+  async searchPlayers(q) {
+    const { data, error } = await sb.rpc('search_players', { q });
+    fail(error);
+    return data;
+  },
+  async myFriends() {
+    const { data, error } = await sb.rpc('my_friends');
+    fail(error);
+    return data;
+  },
+  async addFriend(friendId) {
+    const id = await currentUserId();
+    const { error } = await sb.from('friends').insert({ user_id: id, friend_id: friendId });
+    if (error && !/duplicate/i.test(error.message)) fail(error);
+  },
+  async removeFriend(friendId) {
+    const id = await currentUserId();
+    const { error } = await sb.from('friends').delete().eq('user_id', id).eq('friend_id', friendId);
+    fail(error);
+  },
+  async scores() {
+    const id = await currentUserId();
+    const { data, error } = await sb.from('profiles').select('best_score, total_score').eq('user_id', id).maybeSingle();
+    fail(error);
+    return data || { best_score: 0, total_score: 0 };
+  },
+});
+
+// ---------- Feedback and bug reports ----------
+export const FEEDBACK_KINDS = { bug: 'Bug or something broken', pokemon: 'Wrong Pokémon data', balance: 'Balance', idea: 'Suggestion', other: 'Other' };
+Object.assign(api, {
+  async sendFeedback({ kind, message, context }) {
+    const text = String(message || '').trim();
+    if (!FEEDBACK_KINDS[kind]) throw new ApiError('Pick a type of feedback.');
+    if (text.length < 10 || text.length > 2000) throw new ApiError('Please write between 10 and 2,000 characters.');
+    await currentUserId();
+    const { error } = await sb.from('feedback').insert({ kind, message: text, context: String(context || '').slice(0, 120) });
+    if (error && /rate limit/i.test(error.message || '')) throw new ApiError('You have sent a lot of reports recently. Please try again in an hour.', 429);
+    if (error && /relation .*feedback|PGRST205/i.test(`${error.message} ${error.code}`)) throw new ApiError('Feedback isn\'t set up on the server yet.', 503);
+    fail(error);
+  },
+  async adminFeedback() {
+    const { data, error } = await sb.rpc('admin_feedback', { lim: 100 });
+    fail(error);
+    return data || [];
+  },
+  async setFeedbackStatus(id, status) {
+    const { error } = await sb.rpc('admin_set_feedback_status', { fid: id, new_status: status });
+    fail(error);
+  },
+});
+
+// ---------- Who's online (Supabase Realtime presence) ----------
+let presence = null;
+export function joinPresence(user, onChange) {
+  if (!sb || presence) return;
+  const ch = sb.channel('online', { config: { presence: { key: user.id } } });
+  presence = ch;
+  const emit = () => { if (presence === ch) onChange(Object.keys(ch.presenceState())); };
+  ch.on('presence', { event: 'sync' }, emit)
+    .subscribe(async status => { if (status === 'SUBSCRIBED' && presence === ch) await ch.track({ username: user.username, at: Date.now() }); });
+}
+export async function leavePresence() {
+  if (!presence) return;
+  const ch = presence; presence = null;
+  try { await ch.untrack(); await sb.removeChannel(ch); } catch { /* ignore */ }
+}
+
+async function putRun(run) {
+  const id = await currentUserId();
+  const { error } = await sb.from('runs').upsert({ user_id: id, data: run, updated_at: new Date().toISOString() });
+  fail(error);
+}
+async function putProfile(profile) {
+  const id = await currentUserId();
+  const { error } = await sb.from('profiles').update({ data: profile, updated_at: new Date().toISOString() }).eq('user_id', id);
+  fail(error);
+}
+const WRITERS = { run: putRun, profile: putProfile };
+
+// ---------- Debounced saving with a status indicator ----------
 let statusEl = null;
 export function setStatusElement(el) { statusEl = el; }
 function status(text, cls = '') {
@@ -37,35 +191,35 @@ function status(text, cls = '') {
 
 const timers = {};
 const latest = {};
-function debounced(key, path, payload, delay) {
+function debounced(key, payload, delay) {
   latest[key] = payload;
   clearTimeout(timers[key]);
   status('Saving…');
-  return new Promise(resolve => {
-    timers[key] = setTimeout(async () => {
-      try {
-        await request('PUT', path, latest[key]);
-        status('Saved', 'ok');
-      } catch (e) {
-        status(e.status === 401 ? 'Signed out. Progress is not being saved.' : 'Save failed. Retrying.', 'err');
-        if (e.status !== 401) timers[key] = setTimeout(() => debounced(key, path, latest[key], 0), 5000);
-      }
-      resolve();
-    }, delay);
-  });
+  timers[key] = setTimeout(async () => {
+    const value = latest[key];
+    if (value === undefined) return;
+    try {
+      await WRITERS[key](value);
+      if (latest[key] === value) delete latest[key];
+      status('Saved', 'ok');
+    } catch (e) {
+      status(e.status === 401 ? 'Signed out. Progress is not being saved.' : 'Save failed. Retrying.', 'err');
+      if (e.status !== 401) timers[key] = setTimeout(() => debounced(key, latest[key], 0), 5000);
+    }
+  }, delay);
 }
 
-export const saveRun = (run, delay = 500) => debounced('run', '/api/run', { run }, delay);
-export const saveProfile = (profile, delay = 300) => debounced('profile', '/api/profile', { profile }, delay);
+export const saveRun = (run, delay = 500) => debounced('run', run, delay);
+export const saveProfile = (profile, delay = 300) => debounced('profile', profile, delay);
 
-/** Flush pending saves immediately (e.g. before leaving a screen that ends a run). */
+/** Write pending saves immediately (e.g. before logging out). */
 export async function flushSaves() {
-  const jobs = [];
-  for (const key of Object.keys(timers)) {
+  const jobs = Object.keys(latest).map(key => {
     clearTimeout(timers[key]);
-    if (latest[key]) jobs.push(request('PUT', key === 'run' ? '/api/run' : '/api/profile', latest[key]).catch(() => {}));
+    const v = latest[key];
     delete latest[key];
-  }
+    return WRITERS[key](v).catch(() => {});
+  });
   await Promise.all(jobs);
 }
 

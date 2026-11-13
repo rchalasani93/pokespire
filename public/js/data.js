@@ -4,11 +4,18 @@ export const MOVES = {};
 export const LEARN = {};
 export const TYPES = {};
 export const BY_NAME = {};
+export const ABILITIES = {};
+export const FORMS = {};
+/** Egg moves of each species that has them (the family's first stage). */
+export const EGG = {};
+/** TM / HM / tutor-compatible moves per species: MACHINES[id] = Set of move ids. */
+export const MACHINES = {};
+export const canLearnMachine = (id, move) => !!MACHINES[id]?.has(move);
 
 export async function loadData() {
-  const files = ['pokedex', 'moves', 'learnsets', 'types'];
-  const [dex, moves, learn, types] = await Promise.all(
-    files.map(f => fetch(`/data/${f}.json`).then(r => {
+  const files = ['pokedex', 'moves', 'learnsets', 'types', 'abilities', 'forms', 'machines', 'eggmoves'];
+  const [dex, moves, learn, types, abilities, forms, machines, eggs] = await Promise.all(
+    files.map(f => fetch(new URL(`data/${f}.json`, document.baseURI)).then(r => {
       if (!r.ok) throw new Error(`Failed to load ${f}.json`);
       return r.json();
     }))
@@ -17,9 +24,19 @@ export async function loadData() {
   Object.assign(MOVES, moves);
   Object.assign(LEARN, learn);
   Object.assign(TYPES, types);
+  Object.assign(ABILITIES, abilities);
+  Object.assign(FORMS, forms);
+  Object.assign(EGG, eggs);
+  loadMachines(machines);
   for (const [id, s] of Object.entries(DEX)) {
     s.id = +id;
     BY_NAME[s.n.toLowerCase()] = +id;
+  }
+}
+
+export function loadMachines(machines) {
+  for (const [id, packed] of Object.entries(machines.s)) {
+    MACHINES[id] = new Set(packed ? packed.split(',').map(i => machines.moves[parseInt(i, 36)]) : []);
   }
 }
 
@@ -45,7 +62,7 @@ export function idOf(name) {
 const SPRITES = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites';
 export const spriteUrl = (id, { back = false, shiny = false } = {}) =>
   `${SPRITES}/pokemon/${back ? 'back/' : ''}${shiny ? 'shiny/' : ''}${id}.png`;
-export const artUrl = id => `${SPRITES}/pokemon/other/official-artwork/${id}.png`;
+export const artUrl = (id, shiny = false) => `${SPRITES}/pokemon/other/official-artwork/${shiny ? 'shiny/' : ''}${id}.png`;
 export const itemIconUrl = slug => `${SPRITES}/items/${slug}.png`;
 export const cryUrl = id => `https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${id}.ogg`;
 
@@ -81,3 +98,17 @@ export function movesAtLevel(id, level) {
 
 /** Moves newly learned when reaching exactly `level` (0 = on evolution). */
 export const movesLearnedAt = (id, level) => (LEARN[id] || []).filter(([lv]) => lv === level).map(x => x[1]);
+
+/** First stage of a Pokémon's evolution family (e.g. Charizard → Charmander). */
+export function familyRoot(id) {
+  for (let guard = 0; guard < 4 && DEX[id]?.p; guard++) id = DEX[id].p;
+  return id;
+}
+
+export const bst = id => DEX[id].b.reduce((a, b) => a + b, 0);
+
+/** Egg moves a starter can begin with: its family's first stage's egg moves (or its own). */
+export function eggMovesFor(id) {
+  const list = EGG[familyRoot(id)] || EGG[id] || [];
+  return list.filter(m => MOVES[m]);
+}
