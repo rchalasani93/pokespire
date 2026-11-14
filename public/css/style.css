@@ -619,12 +619,22 @@ table.odds th { font-weight: 600; }
 
 /* Starter egg moves */
 .egg-picker { text-align: left; margin-top: 8px; }
-.egg-moves { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 6px 0; }
-.egg-move { display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 6px 9px; border-radius: 6px; border-left: 4px solid var(--tc); }
+.egg-moves { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin: 6px 0; max-height: 360px; overflow-y: auto; padding-right: 2px; }
+.egg-move { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; padding: 7px 9px; border-radius: 6px; border-left: 4px solid var(--tc); }
+.egg-move-text { display: flex; flex-direction: column; min-width: 0; }
 .egg-move small { color: var(--muted); font-size: .72rem; }
+.egg-move .egg-desc { margin-top: 2px; line-height: 1.3; }
+.egg-tag { flex: none; font-size: .72rem; font-weight: 700; padding: 2px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); }
 .egg-move.on { background: #2c4366; border-color: var(--accent2); border-left-color: var(--tc); }
-.egg-move.on strong::after { content: ' ✓'; color: var(--accent2); }
-.move-chip.egg small { color: var(--accent2); }
+.egg-move.on .egg-tag { color: #10151f; background: var(--accent2); border-color: var(--accent2); }
+.egg-move:disabled { opacity: .45; }
+.move-slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; text-align: left; margin: 6px 0; }
+.move-slot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border: 1px solid var(--line); border-left: 4px solid var(--tc); border-radius: 6px; background: var(--panel2); }
+.move-slot > span { display: flex; flex-direction: column; }
+.move-slot small { color: var(--muted); font-size: .72rem; }
+.move-slot.egg { border-color: var(--accent2); border-left-color: var(--tc); }
+.move-slot.egg small { color: var(--accent2); }
+.starter-stats { margin: 0 auto; max-width: 360px; }
 
 /* Battle: stats under the HP bar */
 .stat-line { display: flex; flex-wrap: wrap; gap: 2px 8px; margin: 3px 0 0; font-size: .68rem; color: #5b6475; }
