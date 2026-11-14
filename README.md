@@ -43,7 +43,7 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Pokédex.** Species you meet in battle or see at a Poké Ball node are registered as seen; tick "Include Pokémon I've seen" to list them with their names and evolution lines. The main menu's Pokédex lists every species you've caught (with shinies marked), by region, with search, type filter and sorting; tick "show uncaught" to browse silhouettes of the rest. Each entry shows base stats, abilities, what you've unlocked for the family, and its evolution line.
 
-**Egg moves.** When you pick a starter you can choose up to 4 of its egg moves (its family's first stage's egg moves, from the latest games that have them). Slots you leave free keep its usual Lv 5 moves, and a starter always keeps at least one attacking move.
+**Choosing a starter.** The starter screen shows its abilities, base stats, evolutions and full moveset. You can pick up to 4 of its egg moves (its family's first stage's egg moves from every generation, attacking moves listed first) to start with; they fill the starting move slots, and slots you leave free keep its usual Lv 5 moves. A starter always keeps at least one attacking move.
 
 **Stats in battle.** Both Pokémon in battle show Attack, Defense, Sp. Atk, Sp. Def and Speed under the HP bar, with stat changes applied: a raised stat is green with its stage (e.g. "Atk 22 +2"), a lowered one red. Accuracy, evasion and confusion show as chips. Tap either HUD to open a stats panel for any Pokémon on your team or any opposing Pokémon you've seen this battle: base stats, stats, stages, the value in battle now, nature, held item and ability (plus moves and PP for your own).
 

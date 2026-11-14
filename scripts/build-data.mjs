@@ -52,13 +52,9 @@ for (const s of base) {
   const tm = Object.entries(ls || {}).filter(([mv, src]) => src.some(x => /^\d[MT]$/.test(x)) && okMove(mv)).map(([mv]) => mv);
   tm.forEach(m => usedMoves.add(m));
   machine[s.num] = tm;
-  const eggByGen = {};
-  for (const [move, sources] of Object.entries(ls || {})) {
-    for (const src of sources) { const m = /^(\d)E$/.exec(src); if (m && okMove(move)) (eggByGen[m[1]] ||= []).push(move); }
-  }
-  const eggGen = Math.max(0, ...Object.keys(eggByGen).map(Number));
-  // Only moves the game already uses elsewhere, so every egg move works in battle
-  if (eggGen) eggMoves[s.num] = [...new Set(eggByGen[eggGen])].sort();
+  // Egg moves from every generation (only moves the game already uses elsewhere, so each one works in battle)
+  const eggs = Object.entries(ls || {}).filter(([mv, src]) => src.some(x => /^\dE$/.test(x)) && okMove(mv)).map(([mv]) => mv);
+  if (eggs.length) eggMoves[s.num] = [...new Set(eggs)].sort();
 
   const evos = (s.evos || []).map(n => byName[n]).filter(Boolean).map(e => {
     const evo = { to: e.num };

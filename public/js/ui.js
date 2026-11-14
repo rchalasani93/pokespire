@@ -1057,13 +1057,17 @@ function eggPickerHtml(m) {
   const root = familyRoot(m.id);
   if (!pool.length) return `<p class="muted small">${esc(DEX[m.id].n)} has no egg moves, so it starts with its usual moves.</p>`;
   const picked = m.moves || [];
+  // Attacking moves first (strongest first), then status moves, each A–Z
+  const sorted = [...pool].sort((a, b) => (MOVES[a].c === 'S') - (MOVES[b].c === 'S') || (MOVES[b].p || 0) - (MOVES[a].p || 0) || MOVES[a].n.localeCompare(MOVES[b].n));
   return `<div class="egg-picker">
-    <h4>Egg moves <small class="muted">${picked.length}/4 picked${root !== m.id ? ` · from ${esc(DEX[root].n)}` : ''}</small></h4>
-    <p class="muted small">Choose up to 4 egg moves to start with. Any slots you leave free keep the usual Lv 5 moves.</p>
-    <div class="egg-moves">${pool.map(id => {
+    <h4>Pick egg moves <small class="muted">${picked.length}/4 picked · ${pool.length} available${root !== m.id ? ` from ${esc(DEX[root].n)}` : ''}</small></h4>
+    <p class="muted small">Tap moves to add them to your starting moves (up to 4). Tap again to remove. Slots you leave free keep the usual Lv 5 moves.</p>
+    <div class="egg-moves">${sorted.map(id => {
       const mv = MOVES[id], on = picked.includes(id);
-      return `<button type="button" class="egg-move ${on ? 'on' : ''}" style="--tc:${TYPE_COLORS[mv.t]}" data-act="starterEggMove" data-arg="${esc(id)}" aria-pressed="${on}" title="${esc(mv.d || '')}">
-        <strong>${esc(mv.n)}</strong><small>${mv.t} · ${CAT[mv.c]}${mv.p ? ' · Pow ' + mv.p : ''}${mv.a ? ' · Acc ' + mv.a : ''}</small></button>`;
+      const full = !on && picked.length >= 4;
+      return `<button type="button" class="egg-move ${on ? 'on' : ''}" style="--tc:${TYPE_COLORS[mv.t]}" data-act="starterEggMove" data-arg="${esc(id)}" aria-pressed="${on}" ${full ? 'disabled' : ''} title="${esc(mv.d || '')}">
+        <span class="egg-move-text"><strong>${esc(mv.n)}</strong><small>${mv.t} · ${CAT[mv.c]}${mv.p ? ' · Pow ' + mv.p : ''}${mv.a ? ' · Acc ' + mv.a : ''}</small>${mv.d ? `<small class="egg-desc">${esc(mv.d)}</small>` : ''}</span>
+        <span class="egg-tag">${on ? 'Added' : 'Add'}</span></button>`;
     }).join('')}</div>
     ${picked.length ? '<button type="button" class="small-btn" data-act="starterEggClear">Clear picks</button>' : ''}
   </div>`;
@@ -1084,8 +1088,14 @@ function renderModal() {
       </div>` : '';
     body = `<div class="center-text">${img(artUrl(m.id, m.shiny), 'modal-art', sp.n)}<h2>${sp.n}</h2><div>${sp.t.map(typeBadge).join('')}</div>
       <div class="abilities-preview">${[...sp.a.map(a => abilityInfo(a, false)), sp.h ? abilityInfo(sp.h, true) : ''].join('')}</div>
-      <h4>Starting moves (Lv 5)</h4>
-      <div class="move-chips">${starterMoveset(m.id, m.moves).map(x => `<span class="move-chip ${(m.moves || []).includes(x) ? 'egg' : ''}" style="--tc:${TYPE_COLORS[MOVES[x].t]}" title="${esc(MOVES[x].d || '')}">${esc(MOVES[x].n)}<small>${MOVES[x].t} · ${CAT[MOVES[x].c]}${MOVES[x].p ? ' · ' + MOVES[x].p : ''}${(m.moves || []).includes(x) ? ' · Egg move' : ''}</small></span>`).join('')}</div>
+      <h4>Base stats <small class="muted">(total ${bst(m.id)})</small></h4>
+      <table class="stats starter-stats">${sp.b.map((v, i) => `<tr><th>${STAT_SHORT[i]}</th><td>${v}</td><td class="bar"><i style="width:${Math.min(100, v / 1.8)}%"></i></td></tr>`).join('')}</table>
+      <p class="muted small">Its actual stats also depend on its nature and IVs, which are rolled when the run starts. See them any time in its Summary.</p>
+      <h4>Starting moves <small class="muted">(Lv 5)</small></h4>
+      <div class="move-slots">${starterMoveset(m.id, m.moves).map(x => {
+        const egg = (m.moves || []).includes(x);
+        return `<div class="move-slot ${egg ? 'egg' : ''}" style="--tc:${TYPE_COLORS[MOVES[x].t]}" title="${esc(MOVES[x].d || '')}"><span><strong>${esc(MOVES[x].n)}</strong><small>${MOVES[x].t} · ${CAT[MOVES[x].c]}${MOVES[x].p ? ' · Pow ' + MOVES[x].p : ''}${egg ? ' · Egg move' : ''}</small></span>${egg ? `<button type="button" class="small-btn" data-act="starterEggMove" data-arg="${esc(x)}" aria-label="Remove ${esc(MOVES[x].n)}">Remove</button>` : ''}</div>`;
+      }).join('')}</div>
       ${eggPickerHtml(m)}
       <h4>Evolution</h4>
       ${evolutionChain(m.id)}
