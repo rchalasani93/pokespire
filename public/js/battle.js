@@ -144,6 +144,7 @@ export function startBattle(run, spec) {
     turn: 0, runAttempts: 0, over: null, phase: 'choose', learnQueue: [], leveled: [], log: [],
     caughtMon: null, exp: {}, moneyStart: run.money, noItems: !!spec.noItems, wildPrize: spec.wildPrize || 0,
     gim: { p: false, e: false }, weather: null, terrain: null,
+    seen: [0], // opposing team members the player has seen
   };
   run.battle = b;
   const out = [];
@@ -162,12 +163,24 @@ export function startBattle(run, spec) {
   return out;
 }
 
+/** A stat with its stage change applied (the same stage multiplier the damage formula uses). */
+export const stagedStat = (value, stage) => Math.floor(value * stageMult(stage || 0));
+/** Opposing team members the player has seen this battle (older saves: the ones sent out so far). */
+export function seenEnemies(run) {
+  const b = run.battle;
+  if (!b) return [];
+  const seen = new Set(b.seen || []);
+  seen.add(b.ei);
+  b.enemy.forEach((m, i) => { if (m.hp <= 0) seen.add(i); });
+  return [...seen].sort((x, y) => x - y);
+}
+
 // ---------- View snapshots for the UI ----------
 const sideMon = (run, side) => side === 'p' ? run.party[run.battle.pi] : run.battle.enemy[run.battle.ei];
 const oppSide = side => (side === 'p' ? 'e' : 'p');
 function snap(mon, vol) {
   if (!mon) return null;
-  const v = { uid: mon.uid, id: mon.id, name: monName(mon), lv: mon.lv, hp: mon.hp, max: maxHp(mon), st: mon.st, shiny: mon.shiny, t: typesOf(mon) };
+  const v = { uid: mon.uid, id: mon.id, name: monName(mon), lv: mon.lv, hp: mon.hp, max: maxHp(mon), st: mon.st, shiny: mon.shiny, t: typesOf(mon), stats: calcStats(mon) };
   // Stat stage changes (only the ones that aren't 0), plus confusion
   const stg = Object.entries(vol?.stg || {}).filter(([, n]) => n);
   if (stg.length) v.stg = Object.fromEntries(stg);
@@ -317,6 +330,8 @@ export function switchIn(run, out, side, index, voluntary = false) {
   } else {
     b.ei = index;
     b.ev = freshVolatile();
+    b.seen ||= [];
+    if (!b.seen.includes(index)) b.seen.push(index);
     b.participants = [sideMon(run, 'p').uid];
     const m = b.enemy[index];
     say(run, out, `${b.trainer.title} ${b.trainer.name} sent out ${monName(m)}!`, { send: 'e' });

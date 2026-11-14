@@ -625,3 +625,27 @@ table.odds th { font-weight: 600; }
 .egg-move.on { background: #2c4366; border-color: var(--accent2); border-left-color: var(--tc); }
 .egg-move.on strong::after { content: ' ✓'; color: var(--accent2); }
 .move-chip.egg small { color: var(--accent2); }
+
+/* Battle: stats under the HP bar */
+.stat-line { display: flex; flex-wrap: wrap; gap: 2px 8px; margin: 3px 0 0; font-size: .68rem; color: #5b6475; }
+.stat-line b { color: #1c2333; font-weight: 700; }
+.stat-line .up b, .stat-line .up small { color: #17803a; }
+.stat-line .down b, .stat-line .down small { color: #b42a2a; }
+.stat-line small { margin-left: 1px; font-weight: 700; }
+.hud[data-act] { cursor: pointer; }
+@media (hover: hover) { .hud[data-act]:hover { outline: 1px solid var(--accent2); outline-offset: 2px; } }
+.hud[data-act]:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+
+/* Battle: inspect panel */
+.inspect-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+.inspect-teams h4 { margin: 4px 0; }
+.inspect-row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.inspect-pick { display: flex; flex-direction: column; align-items: center; padding: 2px 4px; border-radius: 5px; min-width: 52px; }
+.inspect-pick.on { border-color: var(--accent2); background: #2c4366; }
+.inspect-pick.fainted img { filter: grayscale(1); opacity: .5; }
+.inspect-sprite { width: 44px; height: 44px; image-rendering: pixelated; object-fit: contain; }
+.summary-art.pixel { image-rendering: pixelated; }
+.inspect-stats td.up, .inspect-stats th.up { color: #4cd07a; }
+.inspect-stats td.down, .inspect-stats th.down { color: #ff7a7a; }
+.tag-active { font-size: .7rem; border: 1px solid var(--accent2); color: var(--accent2); border-radius: 3px; padding: 0 5px; vertical-align: middle; }
+@media (max-width: 640px) { .inspect-teams { grid-template-columns: 1fr; } }

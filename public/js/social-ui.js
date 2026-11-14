@@ -208,7 +208,9 @@ export function dexEntryHtml(id) {
   if (!have && (S.profile.seen || []).includes(id)) {
     return `<div class="center-text"><div class="dex-no">#${String(id).padStart(4, '0')} · ${REGIONS[regionOf(id)].name}</div>${img(artUrl(id), 'modal-art', sp.n)}
       <h2>${esc(sp.n)}</h2><div>${sp.t.map(typeBadge).join('')}</div>
-      <p class="muted">Seen, not caught yet. Catch or recruit one to see its stats and add it to your starter pool.</p></div>
+      <p class="muted">Seen, not caught yet. Catch or recruit one to add it to your starter pool.</p></div>
+      <h4>Base stats <small class="muted">(total ${bst(id)})</small></h4>
+      <table class="stats">${sp.b.map((v, i) => `<tr><th>${STAT_SHORT[i]}</th><td>${v}</td><td class="bar"><i style="width:${Math.min(100, v / 1.8)}%"></i></td></tr>`).join('')}</table>
       <h4>Evolution</h4>
       ${evolutionChain(id)}
       <div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`;

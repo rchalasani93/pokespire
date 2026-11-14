@@ -486,3 +486,43 @@ console.log('Gym boss, villain boss node, node art and egg move tests passed.');
   assert.equal(Bt.battleView(run).p.stg, undefined);
 }
 console.log('Battle stat stage view tests passed.');
+
+// Moving to a new room restores PP and 20% HP (fainted Pokémon stay fainted)
+{
+  const run = G.newRun(4, 'medium', 'classic');
+  const a = M.createMon(16, 30), b = M.createMon(19, 30);
+  run.party.push(a, b);
+  const max = M.maxHp(a);
+  a.hp = 1; a.moves.forEach(x => { x.pp = 0; });
+  b.hp = 0; b.moves.forEach(x => { x.pp = 0; });
+  run.party[0].hp = M.maxHp(run.party[0]);
+  assert.equal(G.restOnMove(run), true);
+  assert.equal(a.hp, Math.min(max, 1 + Math.ceil(max * 0.2)));
+  assert.ok(a.moves.every(x => x.pp === MOVES[x.id].pp));
+  assert.equal(b.hp, 0, 'fainted stays fainted');
+  assert.ok(b.moves.every(x => x.pp === MOVES[x.id].pp), 'PP restored even when fainted');
+  a.hp = max - 1;
+  G.restOnMove(run);
+  assert.equal(a.hp, max, 'never above max HP');
+  assert.equal(G.restOnMove(run), false, 'nothing to restore');
+}
+console.log('Room rest tests passed.');
+
+// Battle stats: the view carries each side's stats; staged values and seen enemies
+{
+  const run = G.newRun(4, 'medium', 'classic');
+  const foes = [M.createMon(16, 8), M.createMon(19, 8), M.createMon(21, 8)];
+  Bt.startBattle(run, { kind: 'trainer', enemy: foes, ai: 0, trainer: { name: 'Joey', title: 'Youngster', sprite: 'youngster', prize: 10 } });
+  const v = Bt.battleView(run);
+  assert.deepEqual(v.p.stats, M.calcStats(run.party[0]));
+  assert.deepEqual(v.e.stats, M.calcStats(foes[0]));
+  assert.equal(Bt.stagedStat(100, 2), 200);
+  assert.equal(Bt.stagedStat(100, -1), 66);
+  assert.equal(Bt.stagedStat(100, 0), 100);
+  assert.deepEqual(Bt.seenEnemies(run), [0], 'only the lead is seen at the start');
+  Bt.switchIn(run, [], 'e', 2);
+  assert.deepEqual(Bt.seenEnemies(run), [0, 2]);
+  delete run.battle.seen; // older saves
+  assert.deepEqual(Bt.seenEnemies(run), [2]);
+}
+console.log('Battle stats view tests passed.');
