@@ -4,7 +4,7 @@ import { api, FEEDBACK_KINDS, configured, saveRun, saveProfile, flushSaves, canc
 import { FORMS, canLearnMachine, DEX, MOVES, LEARN, REGIONS, ABILITIES, regionOf, familyRoot, eggMovesFor, bst, spriteUrl, artUrl, itemIconUrl, TYPE_COLORS, movesAtLevel } from './data.js';
 import {
   createMon, calcStats, maxHp, monName, NATURES, STAT_LABELS, STAT_SHORT, natureMod, natureLabel, ivJudge, expForLevel, gainExp, levelUp, evoItemFor,
-  levelEvolution, itemEvolution, evolve, replaceMove, teraType, starterMoves,
+  levelEvolution, itemEvolution, evolve, replaceMove, teraType, starterMoves, typesOf,
 } from './mechanics.js';
 import {
   ACTS, NODE_INFO, ROWS, newRun, generateMap, availableNodes, buildEncounter, startLeague, leagueOpponent,
@@ -14,7 +14,7 @@ import {
 } from './game.js';
 import { ITEMS, BAG_POCKETS, DIFFICULTIES, diffOf, GAME_MODES, modeOf, trainerSpriteUrl, HELD_KINDS, KEY_ITEMS } from './content.js';
 import { clearBattleForm, setBattleHooks } from './battle.js';
-import { startBattle, applyItem, battleView, megaFormFor } from './battle.js';
+import { startBattle, applyItem, battleView, megaFormFor, seenEnemies, stagedStat } from './battle.js';
 import { renderBattle, beginBattle, onBattleAction, resumeBattleUI } from './battle-ui.js';
 import { dexEntryHtml } from './social-ui.js';
 import { playMusic, sfx, playCry, applyAudioSettings, unlockAudio } from './audio.js';
@@ -110,6 +110,14 @@ document.addEventListener('click', e => {
   e.preventDefault();
   if (!el.classList.contains('silent')) sfx(el.dataset.act === 'back' || el.dataset.act === 'closeModal' ? 'back' : 'select');
   fn(el.dataset.arg, el);
+});
+// Enter / Space on non-button elements that act like buttons (e.g. the battle HUDs)
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const el = e.target.closest?.('[role="button"][data-act]');
+  if (!el || el.tagName === 'BUTTON') return;
+  e.preventDefault();
+  el.click();
 });
 document.addEventListener('submit', e => {
   const form = e.target.closest('form[data-form]');
@@ -978,6 +986,71 @@ registerActions({
   useItemOn: i => useFieldItem(S.modal.item, +i),
 });
 
+// ---------- Battle: inspect any Pokémon's stats ----------
+const STAGE_KEYS = [null, 'atk', 'def', 'spa', 'spd', 'spe'];
+function battleInspectHtml(m) {
+  const run = S.run, b = run?.battle;
+  if (!b) return '<p>The battle is over.</p><div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>';
+  const foes = seenEnemies(run);
+  const list = m.side === 'p' ? run.party : b.enemy;
+  const mon = list[m.index] || (m.side === 'p' ? run.party[b.pi] : b.enemy[b.ei]);
+  const active = m.side === 'p' ? m.index === b.pi : m.index === b.ei;
+  const vol = active ? (m.side === 'p' ? b.pv : b.ev) : null;
+  const sp = DEX[mon.id];
+  const stats = calcStats(mon);
+  const base = mon.bf?.b || sp.b;
+  const pick = (side, i, x) => `<button class="inspect-pick ${side === m.side && i === m.index ? 'on' : ''} ${x.hp > 0 ? '' : 'fainted'}" data-act="inspectPick" data-arg="${side}|${i}" title="${esc(monName(x))}">
+    ${img(spriteUrl(x.id, { shiny: x.shiny }), 'inspect-sprite', monName(x))}<small>Lv ${x.lv}</small></button>`;
+  const hidden = b.trainer ? b.enemy.length - foes.length : 0;
+  const rows = stats.map((v, i) => {
+    const nm = natureMod(mon.nat, i);
+    const stage = i && vol ? vol.stg[STAGE_KEYS[i]] || 0 : 0;
+    const now = i ? stagedStat(v, stage) : null;
+    return `<tr><th class="${nm > 1 ? 'up' : nm < 1 ? 'down' : ''}">${STAT_SHORT[i]}</th><td>${base[i]}</td>
+      <td>${i === 0 ? `${mon.hp}/${maxHp(mon)}` : v}</td>
+      <td class="${stage > 0 ? 'up' : stage < 0 ? 'down' : ''}">${i === 0 ? '' : active ? (stage ? (stage > 0 ? '+' : '−') + Math.abs(stage) : '0') : '·'}</td>
+      <td>${i === 0 ? '' : active ? `<b>${now}</b>` : '·'}</td></tr>`;
+  }).join('');
+  return `<h2>Pokémon in battle</h2>
+    <div class="inspect-teams">
+      <div><h4>Your team</h4><div class="inspect-row">${run.party.map((x, i) => pick('p', i, x)).join('')}</div></div>
+      <div><h4>${b.trainer ? esc(`${b.trainer.title} ${b.trainer.name}`) : 'Wild Pokémon'}</h4><div class="inspect-row">${foes.map(i => pick('e', i, b.enemy[i])).join('')}${hidden ? `<span class="muted small">+${hidden} not seen yet</span>` : ''}</div></div>
+    </div>
+    <div class="summary-head">
+      ${img(spriteUrl(mon.id, { shiny: mon.shiny }), 'summary-art pixel', sp.n)}
+      <div><h3>${esc(monName(mon))}${mon.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} <small>Lv ${mon.lv}</small>${active ? ' <span class="tag-active">In battle</span>' : ''}</h3>
+        <div>${typesOf(mon).map(typeBadge).join('')} ${statusTag(mon.st)}</div>
+        <p class="small">${esc(natureLabel(mon.nat))}${mon.item ? ` · Holding ${itemImg(mon.item)} ${esc(mon.item)}` : ''}</p>
+      </div>
+    </div>
+    <table class="stats full inspect-stats">
+      <tr><th></th><th>Base</th><th>Stat</th><th>Stage</th><th>Now</th></tr>${rows}
+      <tr class="totals"><th>Total</th><td>${base.reduce((a, c) => a + c, 0)}</td><td></td><td></td><td></td></tr>
+    </table>
+    <p class="small muted">"Now" is the stat with this battle's stat changes applied${active ? '' : ' (only for the Pokémon currently in battle)'}. Green and red stat names mark the nature's raised and lowered stats.</p>
+    <h4>Ability</h4>${abilityInfo(mon.ab, mon.ab === sp.h)}
+    ${m.side === 'p' ? `<h4>Moves</h4><div class="move-chips">${mon.moves.map(x => `<span class="move-chip" style="--tc:${TYPE_COLORS[MOVES[x.id].t]}" title="${esc(MOVES[x.id].d || '')}">${esc(MOVES[x.id].n)}<small>${MOVES[x.id].t} · ${CAT[MOVES[x.id].c]}${MOVES[x.id].p ? ' · ' + MOVES[x.id].p : ''} · PP ${x.pp}/${MOVES[x.id].pp}</small></span>`).join('')}</div>` : ''}
+    <div class="row gap"><button class="primary" data-act="closeModal">Back to battle</button></div>`;
+}
+registerActions({
+  inspectBattle: side => {
+    const b = S.run?.battle;
+    if (!b) return;
+    S.modal = { type: 'battleInspect', side: side === 'e' ? 'e' : 'p', index: side === 'e' ? b.ei : b.pi };
+    render();
+  },
+  inspectPick: arg => {
+    const [side, i] = String(arg).split('|');
+    const b = S.run?.battle;
+    if (!b || S.modal?.type !== 'battleInspect') return;
+    const idx = Number(i);
+    if (side === 'e' && !seenEnemies(S.run).includes(idx)) return;
+    if (side === 'p' && !S.run.party[idx]) return;
+    S.modal.side = side === 'e' ? 'e' : 'p'; S.modal.index = idx;
+    render();
+  },
+});
+
 /** Egg moves to pick from on the starter screen (up to 4; free slots keep the usual Lv 5 moves). */
 function eggPickerHtml(m) {
   const pool = eggMovesFor(m.id);
@@ -1043,6 +1116,8 @@ function renderModal() {
     body = dexEntryHtml(m.id);
   } else if (m.type === 'admin') {
     body = adminHtml();
+  } else if (m.type === 'battleInspect') {
+    body = battleInspectHtml(m);
   } else if (m.type === 'feedback') {
     body = m.sent ? `<h2>Thanks!</h2><p>Your report was sent. It helps a lot.</p><div class="row gap"><button class="primary" data-act="closeModal">Close</button></div>`
       : `<h2>Send feedback</h2>

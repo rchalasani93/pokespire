@@ -2,7 +2,7 @@
 import { S } from './state.js';
 import { DEX, MOVES, spriteUrl, typeEffect, TYPE_COLORS } from './data.js';
 import { maxHp, monName, expForLevel } from './mechanics.js';
-import { playerAction, forceSwitch, battleView, gimmickOptions } from './battle.js';
+import { playerAction, forceSwitch, battleView, gimmickOptions, stagedStat } from './battle.js';
 import { ITEMS, trainerSpriteUrl, Z_MOVES, MAX_MOVES, GIMMICK_NAMES } from './content.js';
 import { typesOf, teraType } from './mechanics.js';
 import { FORMS } from './data.js';
@@ -99,11 +99,11 @@ function battleScreen() {
   const scene = `<div class="scene kind-${b.kind}">
     ${b.trainer ? `<img class="trainer-sprite" src="${trainerSpriteUrl(b.trainer.sprite)}" alt="" data-onerror="remove">` : ''}
     <div class="foe-col">
-    <div class="hud foe">
+    <div class="hud foe" data-act="inspectBattle" data-arg="e" role="button" tabindex="0" title="See stats">
       <div class="row"><strong>${esc(E?.name)}${E?.shiny ? ' <span class="shiny-mark" title="Shiny">✦</span>' : ''} ${E ? caughtMark(E.id, { real: true }) : ''}</strong><span>Lv ${E?.lv}</span></div>
       <div class="hud-types">${E ? (E.t || DEX[E.id].t).map(typeBadge).join('') : ''}${formTag(E)}</div>
       ${E ? hpBar(E.hp, E.max) : ''}
-      ${stageLine(E)}
+      ${statLine(E)}${stageLine(E)}
       <div class="row small status-line"><span>${statusTag(E?.st)}${b.enemy[b.ei]?.elite ? '<span class="elite-tag">ELITE</span>' : ''}</span>${enemyBalls}</div>
     </div>
     <div class="wallet-chip">$${run.money.toLocaleString()} · ${(run.score || 0).toLocaleString()} pts</div>
@@ -116,11 +116,11 @@ function battleScreen() {
     <div class="sprite-wrap player ${P?.dmax ? 'dmax' : ''} ${P?.tera ? 'tera' : ''} ${fx.hit === 'p' ? 'hit' : ''} ${fx.faint === 'p' || (P && P.hp <= 0) ? 'fainted' : ''} ${fx.send === 'p' ? 'sendout' : ''} ${P?.shiny ? 'is-shiny' : ''} ${fx.send === 'p' && P?.shiny ? 'sparkle' : ''}">
       ${P ? monSprite(P, true) : ''}
     </div>
-    <div class="hud player">
+    <div class="hud player" data-act="inspectBattle" data-arg="p" role="button" tabindex="0" title="See stats">
       <div class="row"><strong>${esc(P?.name)}${P?.shiny ? ' ✦' : ''}</strong><span>Lv ${P?.lv}</span></div>
       <div class="hud-types">${P ? (P.t || DEX[P.id].t).map(typeBadge).join('') : ''}${formTag(P)}</div>
       ${P ? hpBar(P.hp, P.max) : ''}
-      ${stageLine(P)}
+      ${statLine(P)}${stageLine(P)}
       <div class="row small status-line"><span>${statusTag(P?.st)}</span><span>${P?.hp}/${P?.max}</span></div>
       <div class="expbar"><i style="width:${expPct}%"></i></div>
     </div>
@@ -174,9 +174,23 @@ const stageMultiplier = (k, n) => {
   const base = k === 'accuracy' || k === 'evasion' ? 3 : 2;
   return n >= 0 ? (base + n) / base : base / (base - n);
 };
+/** Attack, Defense, Sp. Atk, Sp. Def and Speed under the HP bar, with stage changes applied. */
+const STAT_KEYS = ['atk', 'def', 'spa', 'spd', 'spe'];
+function statLine(v) {
+  if (!v?.stats) return '';
+  return `<div class="stat-line">${STAT_KEYS.map((k, i) => {
+    const n = v.stg?.[k] || 0;
+    const val = stagedStat(v.stats[i + 1], n);
+    const sign = n > 0 ? '+' : '−';
+    return `<span class="${n > 0 ? 'up' : n < 0 ? 'down' : ''}" title="${STAGE_FULL[k]} ${val}${n ? ` (${sign}${Math.abs(n)}, ×${stageMultiplier(k, n).toFixed(2).replace(/0$/, '')} of ${v.stats[i + 1]})` : ''}">${STAGE_SHORT[k]} <b>${val}</b>${n ? `<small>${sign}${Math.abs(n)}</small>` : ''}</span>`;
+  }).join('')}</div>`;
+}
+// Accuracy, evasion and confusion as chips (the five main stats show in statLine)
 function stageLine(v) {
-  if (!v || (!v.stg && !v.conf)) return '';
-  const chips = Object.entries(v.stg || {}).filter(([k, n]) => STAGE_SHORT[k] && Number.isInteger(n) && n).map(([k, n]) => {
+  if (!v) return '';
+  const extra = Object.entries(v.stg || {}).filter(([k, n]) => (k === 'accuracy' || k === 'evasion') && Number.isInteger(n) && n);
+  if (!extra.length && !v.conf) return '';
+  const chips = extra.map(([k, n]) => {
     const mult = stageMultiplier(k, n);
     const sign = n > 0 ? '+' : '−';
     return `<span class="stage ${n > 0 ? 'up' : 'down'}" title="${STAGE_FULL[k]} ${sign}${Math.abs(n)} (×${mult.toFixed(2).replace(/0$/, '')})">${STAGE_SHORT[k]} ${sign}${Math.abs(n)}</span>`;

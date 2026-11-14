@@ -45,7 +45,9 @@ A roguelike Pokémon journey for the browser. Pick a starter, climb three acts o
 
 **Egg moves.** When you pick a starter you can choose up to 4 of its egg moves (its family's first stage's egg moves, from the latest games that have them). Slots you leave free keep its usual Lv 5 moves, and a starter always keeps at least one attacking move.
 
-**Stat changes in battle.** Raised and lowered stats (Attack, Defense, Sp. Atk, Sp. Def, Speed, accuracy, evasion) show as chips under each HP bar, e.g. "Atk +2" or "Spe −1", along with confusion.
+**Stats in battle.** Both Pokémon in battle show Attack, Defense, Sp. Atk, Sp. Def and Speed under the HP bar, with stat changes applied: a raised stat is green with its stage (e.g. "Atk 22 +2"), a lowered one red. Accuracy, evasion and confusion show as chips. Tap either HUD to open a stats panel for any Pokémon on your team or any opposing Pokémon you've seen this battle: base stats, stats, stages, the value in battle now, nature, held item and ability (plus moves and PP for your own).
+
+**Pokédex stats.** Base stats show for every species you've seen or caught.
 
 **Starters by region.** Your first run offers the three Kanto starters. Every Pokémon you catch, on any run, joins the starter pool for future runs, grouped by its home region (Kanto through Paldea).
 

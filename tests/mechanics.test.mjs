@@ -507,3 +507,22 @@ console.log('Battle stat stage view tests passed.');
   assert.equal(G.restOnMove(run), false, 'nothing to restore');
 }
 console.log('Room rest tests passed.');
+
+// Battle stats: the view carries each side's stats; staged values and seen enemies
+{
+  const run = G.newRun(4, 'medium', 'classic');
+  const foes = [M.createMon(16, 8), M.createMon(19, 8), M.createMon(21, 8)];
+  Bt.startBattle(run, { kind: 'trainer', enemy: foes, ai: 0, trainer: { name: 'Joey', title: 'Youngster', sprite: 'youngster', prize: 10 } });
+  const v = Bt.battleView(run);
+  assert.deepEqual(v.p.stats, M.calcStats(run.party[0]));
+  assert.deepEqual(v.e.stats, M.calcStats(foes[0]));
+  assert.equal(Bt.stagedStat(100, 2), 200);
+  assert.equal(Bt.stagedStat(100, -1), 66);
+  assert.equal(Bt.stagedStat(100, 0), 100);
+  assert.deepEqual(Bt.seenEnemies(run), [0], 'only the lead is seen at the start');
+  Bt.switchIn(run, [], 'e', 2);
+  assert.deepEqual(Bt.seenEnemies(run), [0, 2]);
+  delete run.battle.seen; // older saves
+  assert.deepEqual(Bt.seenEnemies(run), [2]);
+}
+console.log('Battle stats view tests passed.');
